@@ -59,3 +59,8 @@ body.state-off :is(.state-on, .state-unknown) {
 button {
     font-size: 1em;
 }
+
+/* The App Group sync panel is developer-facing; keep it off the iOS UI. */
+body.platform-ios .shared-settings {
+    display: none;
+}
