@@ -84,20 +84,21 @@ final class SharedSettingsStore {
             defaults.set(data, forKey: SharedSettingsKeys.configJSON)
             defaults.set(metaData, forKey: SharedSettingsKeys.configMeta)
             defaults.synchronize()
-            if mirrorToCloud {
-                CloudSettingsSync.push(
-                    config: config,
-                    schemaVersion: schemaVersion,
-                    lastModifiedAt: lastModifiedAt,
-                    to: cloudStore
-                )
-            }
-            postChangeNotification()
-            return (true, nil)
         } catch {
             log.error("Failed to write shared config: \(String(describing: error))")
             return (false, "encode_failed")
         }
+        // iCloud is best-effort. Unavailability or KVS errors must not fail the local write.
+        if mirrorToCloud {
+            CloudSettingsSync.push(
+                config: config,
+                schemaVersion: schemaVersion,
+                lastModifiedAt: lastModifiedAt,
+                to: cloudStore
+            )
+        }
+        postChangeNotification()
+        return (true, nil)
     }
 
     /// Startup / first-read merge. iCloud (strictly newer) wins over the App Group

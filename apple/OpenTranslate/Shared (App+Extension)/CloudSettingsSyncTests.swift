@@ -5,7 +5,8 @@
 //
 //  Run:
 //    swiftc -parse-as-library -o /tmp/CloudSettingsSyncTests \
-//      "CloudSettingsSync.swift" "CloudSettingsSyncTests.swift" && /tmp/CloudSettingsSyncTests
+//      "CloudSettingsSync.swift" "SharedSettingsStore.swift" "CloudSettingsSyncTests.swift" \
+//      && /tmp/CloudSettingsSyncTests
 //
 
 import Foundation
@@ -27,12 +28,14 @@ enum CloudSettingsSyncTests {
         failed += check("merge pushes newer local whitelist") { try mergePushesNewerLocal() }
         failed += check("inbound tainted payload is re-filtered") { try taintedInboundIsRefiltered() }
         failed += check("unavailable iCloud is a silent no-op") { try unavailableCloudIsNoop() }
+        failed += check("unavailable iCloud ignores residual payload") { try unavailableCloudIgnoresResidualPayload() }
         failed += check("store write mirrors whitelist only") { try storeWriteMirrorsWhitelist() }
         failed += check("store first read pulls newer iCloud onto App Group") { try storeReadPullsNewerCloud() }
         failed += check("store write still succeeds when iCloud is down") { try storeWriteWorksWithoutCloud() }
+        failed += check("store read stays local when iCloud is down") { try storeReadStaysLocalWithoutCloud() }
 
         if failed == 0 {
-            print("CloudSettingsSyncTests: all 17 passed")
+            print("CloudSettingsSyncTests: all 19 passed")
             exit(0)
         } else {
             print("CloudSettingsSyncTests: \(failed) failed")
@@ -246,9 +249,13 @@ enum CloudSettingsSyncTests {
 
         var isAvailable: Bool { available }
 
-        func data(forKey key: String) -> Data? { storage[key] }
+        func data(forKey key: String) -> Data? {
+            guard available else { return nil }
+            return storage[key]
+        }
 
         func set(_ data: Data?, forKey key: String) {
+            guard available else { return }
             if let data {
                 storage[key] = data
             } else {
@@ -462,6 +469,86 @@ enum CloudSettingsSyncTests {
         guard let envelope = store.readEnvelope() else { try fail("local read failed") }
         if (envelope.config["language"] as? [String: Any])?["targetCode"] as? String != "zho" {
             try fail("local config missing after degraded write")
+        }
+        if (envelope.config["providersConfig"] as? [[String: Any]])?.first?["apiKey"] as? String != "sk-THIS-MUST-NOT-SYNC" {
+            try fail("degraded write dropped the API key")
+        }
+    }
+
+    private static func unavailableCloudIgnoresResidualPayload() throws {
+        let store = MemoryCloudStore()
+        let residual = CloudSettingsSync.makePayload(
+            from: ["language": ["sourceCode": "deu", "targetCode": "kor"], "theme": "light"],
+            schemaVersion: 80,
+            lastModifiedAt: 9000
+        )!
+        store.set(try residual.jsonData(), forKey: CloudSettingsKeys.payload)
+        let residualJSON = try store.payloadJSON()
+        store.available = false
+
+        if CloudSettingsSync.readPayload(from: store) != nil {
+            try fail("readPayload should ignore residual data when iCloud is down")
+        }
+        let pushed = CloudSettingsSync.push(
+            config: fullLocalConfig(),
+            schemaVersion: 80,
+            lastModifiedAt: 1,
+            to: store
+        )
+        if pushed { try fail("push should not write when iCloud is down") }
+        if try store.payloadJSON() != residualJSON {
+            try fail("unavailable push mutated residual payload")
+        }
+        let outcome = CloudSettingsSync.merge(
+            local: (fullLocalConfig(), SharedConfigMeta(schemaVersion: 80, lastModifiedAt: 1, source: "app")),
+            store: store
+        )
+        if outcome.result != .skipped(reason: "icloud_unavailable") {
+            try fail("expected skipped, got \(outcome.result)")
+        }
+        if (outcome.config?["language"] as? [String: Any])?["targetCode"] as? String != "zho" {
+            try fail("merge pulled residual cloud fields while iCloud was down")
+        }
+        if (outcome.config?["providersConfig"] as? [[String: Any]])?.first?["apiKey"] as? String != "sk-THIS-MUST-NOT-SYNC" {
+            try fail("local API key changed while iCloud was down")
+        }
+    }
+
+    private static func storeReadStaysLocalWithoutCloud() throws {
+        let cloud = MemoryCloudStore()
+        let defaults = makeIsolatedDefaults()
+        let writer = SharedSettingsStore(defaults: defaults, cloudStore: MemoryCloudStore())
+        _ = writer.write(
+            config: fullLocalConfig(),
+            schemaVersion: 80,
+            lastModifiedAt: 1000,
+            source: "app",
+            mirrorToCloud: false
+        )
+        let remote = CloudSettingsSync.makePayload(
+            from: ["language": ["sourceCode": "deu", "targetCode": "kor"], "theme": "light"],
+            schemaVersion: 80,
+            lastModifiedAt: 9000
+        )!
+        cloud.set(try remote.jsonData(), forKey: CloudSettingsKeys.payload)
+        let residualJSON = try cloud.payloadJSON()
+        cloud.available = false
+
+        let reader = SharedSettingsStore(defaults: defaults, cloudStore: cloud)
+        let merge = reader.mergeFromCloudIfNeeded()
+        if merge != .skipped(reason: "icloud_unavailable") {
+            try fail("expected skipped merge, got \(merge)")
+        }
+        guard let envelope = reader.readEnvelope() else { try fail("local read failed while iCloud was down") }
+        let language = envelope.config["language"] as? [String: Any] ?? [:]
+        if language["targetCode"] as? String != "zho" { try fail("unavailable read pulled targetCode") }
+        if envelope.config["theme"] as? String != "dark" { try fail("unavailable read pulled theme") }
+        if envelope.meta.source != "app" { try fail("source should stay app, got \(envelope.meta.source ?? "nil")") }
+        if (envelope.config["providersConfig"] as? [[String: Any]])?.first?["apiKey"] as? String != "sk-THIS-MUST-NOT-SYNC" {
+            try fail("unavailable read dropped the API key")
+        }
+        if try cloud.payloadJSON() != residualJSON {
+            try fail("degraded read mutated residual cloud payload")
         }
     }
 }

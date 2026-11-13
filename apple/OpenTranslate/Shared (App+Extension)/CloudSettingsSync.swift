@@ -19,7 +19,8 @@ protocol CloudKeyValueStoring: AnyObject {
     func set(_ data: Data?, forKey key: String)
 }
 
-/// Default KVS backend. Unavailable when the user is not signed into iCloud.
+/// Default KVS backend. Unavailable when the user is not signed into iCloud
+/// (no ubiquity identity token). I/O failures degrade to a silent no-op.
 final class UbiquitousCloudKeyValueStore: CloudKeyValueStoring {
     static let shared = UbiquitousCloudKeyValueStore()
 
@@ -40,7 +41,8 @@ final class UbiquitousCloudKeyValueStore: CloudKeyValueStoring {
         } else {
             store.removeObject(forKey: key)
         }
-        store.synchronize()
+        // A false synchronize just means the daemon has not flushed yet.
+        _ = store.synchronize()
     }
 }
 
