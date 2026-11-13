@@ -44,3 +44,34 @@ App（iOS + macOS）打开后显示**与 Safari 扩展完全一致的设置界�
 
 - `docs/SHARED-SETTINGS.md`（已有的共享设置协议说明）
 - `docs/SAFARI.md`（构建与调试手册）
+
+## 阶段二：轻量 iCloud 同步（**等方案 A 验收通过后才开始，不要提前做**）
+
+目标：同一个 Apple ID 的多台设备之间，**非敏感设置**保持一致。API Key 不同步。
+
+### 允许同步的字段（白名单，其余一律不同步）
+
+- `language.sourceCode` / `language.targetCode`
+- 显示模式类开关（双语对照 / 仅译文）
+- 主题、字号等纯偏好项
+
+### 绝对不同步
+
+- 任何 provider 的 API Key、token、secret
+- 队列参数、缓存
+- 任何与账号、账单、设备标识相关的内容
+
+### 实现约束
+
+1. 用 `NSUbiquitousKeyValueStore`（最简单、够用），不要引入 CloudKit。
+2. **不改**现有 App Group 的 key 名与 JSON 结构；iCloud 是**叠加**的一层，读优先级：iCloud（较新）> App Group（本机）。
+3. 冲突仍按 `lastModifiedAt` 判定，沿用现有策略，不要新造一套。
+4. 需要开启 iCloud capability（KVS），并在任务报告里说明改了哪个 entitlements。
+5. **必须在写入前过滤白名单**：不做过滤、直接把整份 config 推上去，是这次任务的红线错误。
+
+### 验收
+
+- 白名单内的字段改动后能同步；白名单外（尤其 API Key）**在 iCloud 里查不到**
+- 未登录 iCloud / iCloud 不可用时，App 行为与现在完全一致（降级，不报错）
+- App Group 原有同步路径不受影响
+
