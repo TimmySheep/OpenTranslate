@@ -60,6 +60,30 @@ button {
     font-size: 1em;
 }
 
+.shared-settings {
+    margin-top: 24px;
+    max-width: 420px;
+    text-align: left;
+}
+.shared-settings h2 {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+}
+.shared-settings .row {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0;
+}
+.shared-settings input {
+    flex: 1;
+    padding: 8px;
+}
+.shared-settings .hint {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+
 /* The App Group sync panel is developer-facing; keep it off the iOS UI. */
 body.platform-ios .shared-settings {
     display: none;

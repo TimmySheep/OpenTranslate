@@ -49,6 +49,10 @@
 		11EEF86A2FE586BC003E1F8A /* _locales in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF8562FE586BC003E1F8A /* _locales */; };
 		11EEF86B2FE586BC003E1F8A /* icon in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF8572FE586BC003E1F8A /* icon */; };
 		11EEF86C2FE586BC003E1F8A /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF8582FE586BC003E1F8A /* assets */; };
+		11EEF9022FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */; };
+		11EEF9032FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */; };
+		11EEF9042FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */; };
+		11EEF9052FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -125,6 +129,11 @@
 		11EEF8562FE586BC003E1F8A /* _locales */ = {isa = PBXFileReference; lastKnownFileType = folder; name = _locales; path = Resources/_locales; sourceTree = "<group>"; };
 		11EEF8572FE586BC003E1F8A /* icon */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icon; path = Resources/icon; sourceTree = "<group>"; };
 		11EEF8582FE586BC003E1F8A /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
+		11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSettingsStore.swift; sourceTree = "<group>"; };
+		11EEF9062FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
+		11EEF9072FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
+		11EEF9082FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
+		11EEF9092FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +172,7 @@
 			isa = PBXGroup;
 			children = (
 				11EEF7F32FE586BB003E1F8A /* Shared (App) */,
+				11EEF90A2FE586BB003E1F8A /* Shared (App+Extension) */,
 				11EEF7FC2FE586BB003E1F8A /* Shared (Extension) */,
 				11EEF8042FE586BB003E1F8A /* iOS (App) */,
 				11EEF8152FE586BB003E1F8A /* macOS (App) */,
@@ -193,6 +203,14 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		11EEF90A2FE586BB003E1F8A /* Shared (App+Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */,
+			);
+			path = "Shared (App+Extension)";
+			sourceTree = "<group>";
+		};
 		11EEF7FC2FE586BB003E1F8A /* Shared (Extension) */ = {
 			isa = PBXGroup;
 			children = (
@@ -216,6 +234,7 @@
 		11EEF8042FE586BB003E1F8A /* iOS (App) */ = {
 			isa = PBXGroup;
 			children = (
+				11EEF9062FE586BB003E1F8A /* OpenTranslate.entitlements */,
 				11EEF8052FE586BB003E1F8A /* AppDelegate.swift */,
 				11EEF8072FE586BB003E1F8A /* SceneDelegate.swift */,
 				11EEF8092FE586BB003E1F8A /* LaunchScreen.storyboard */,
@@ -228,6 +247,7 @@
 		11EEF8152FE586BB003E1F8A /* macOS (App) */ = {
 			isa = PBXGroup;
 			children = (
+				11EEF9072FE586BB003E1F8A /* OpenTranslate.entitlements */,
 				11EEF8162FE586BB003E1F8A /* AppDelegate.swift */,
 				11EEF8182FE586BB003E1F8A /* Main.storyboard */,
 				11EEF81B2FE586BB003E1F8A /* Info.plist */,
@@ -238,6 +258,7 @@
 		11EEF8242FE586BB003E1F8A /* iOS (Extension) */ = {
 			isa = PBXGroup;
 			children = (
+				11EEF9082FE586BB003E1F8A /* OpenTranslate.entitlements */,
 				11EEF8252FE586BB003E1F8A /* Info.plist */,
 			);
 			path = "iOS (Extension)";
@@ -246,6 +267,7 @@
 		11EEF82E2FE586BB003E1F8A /* macOS (Extension) */ = {
 			isa = PBXGroup;
 			children = (
+				11EEF9092FE586BB003E1F8A /* OpenTranslate.entitlements */,
 				11EEF82F2FE586BB003E1F8A /* Info.plist */,
 			);
 			path = "macOS (Extension)";
@@ -470,6 +492,7 @@
 				11EEF8382FE586BB003E1F8A /* ViewController.swift in Sources */,
 				11EEF8062FE586BB003E1F8A /* AppDelegate.swift in Sources */,
 				11EEF8082FE586BB003E1F8A /* SceneDelegate.swift in Sources */,
+				11EEF9022FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -479,6 +502,7 @@
 			files = (
 				11EEF8392FE586BB003E1F8A /* ViewController.swift in Sources */,
 				11EEF8172FE586BB003E1F8A /* AppDelegate.swift in Sources */,
+				11EEF9032FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -487,6 +511,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				11EEF83C2FE586BB003E1F8A /* SafariWebExtensionHandler.swift in Sources */,
+				11EEF9042FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -495,6 +520,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				11EEF83D2FE586BB003E1F8A /* SafariWebExtensionHandler.swift in Sources */,
+				11EEF9052FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -666,8 +692,10 @@
 		11EEF8412FE586BB003E1F8A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = A4HHRH8Y9M;
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "iPhone Distribution";
+				PROVISIONING_PROFILE_SPECIFIER = "OpenTranslate Safari Extension App Store";
+				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
@@ -684,7 +712,7 @@
 					"-framework",
 					SafariServices,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mekedron.OpenTranslate.Extension;
+				PRODUCT_BUNDLE_IDENTIFIER = net.timhuang.opentranslate.extension;
 				PRODUCT_NAME = "OpenTranslate Extension";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -700,8 +728,10 @@
 		11EEF8422FE586BB003E1F8A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = A4HHRH8Y9M;
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "iPhone Distribution";
+				PROVISIONING_PROFILE_SPECIFIER = "OpenTranslate Safari Extension App Store";
+				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
@@ -718,7 +748,7 @@
 					"-framework",
 					SafariServices,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mekedron.OpenTranslate.Extension;
+				PRODUCT_BUNDLE_IDENTIFIER = net.timhuang.opentranslate.extension;
 				PRODUCT_NAME = "OpenTranslate Extension";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -735,10 +765,12 @@
 		11EEF8452FE586BB003E1F8A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "iPhone Distribution";
+				PROVISIONING_PROFILE_SPECIFIER = "OpenTranslate iOS App Store";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = A4HHRH8Y9M;
+				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "iOS (App)/Info.plist";
@@ -760,7 +792,7 @@
 					"-framework",
 					WebKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mekedron.OpenTranslate;
+				PRODUCT_BUNDLE_IDENTIFIER = net.timhuang.opentranslate;
 				PRODUCT_NAME = OpenTranslate;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -776,10 +808,12 @@
 		11EEF8462FE586BB003E1F8A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "iPhone Distribution";
+				PROVISIONING_PROFILE_SPECIFIER = "OpenTranslate iOS App Store";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = A4HHRH8Y9M;
+				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "iOS (App)/Info.plist";
@@ -801,7 +835,7 @@
 					"-framework",
 					WebKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mekedron.OpenTranslate;
+				PRODUCT_BUNDLE_IDENTIFIER = net.timhuang.opentranslate;
 				PRODUCT_NAME = OpenTranslate;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -819,7 +853,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = A4HHRH8Y9M;
+				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -833,13 +867,14 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"-framework",
 					SafariServices,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mekedron.OpenTranslate.Extension;
+				PRODUCT_BUNDLE_IDENTIFIER = net.timhuang.opentranslate.extension;
+				CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/OpenTranslate.entitlements";
 				PRODUCT_NAME = "OpenTranslate Extension";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -855,7 +890,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = A4HHRH8Y9M;
+				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -869,13 +904,14 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"-framework",
 					SafariServices,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mekedron.OpenTranslate.Extension;
+				PRODUCT_BUNDLE_IDENTIFIER = net.timhuang.opentranslate.extension;
+				CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/OpenTranslate.entitlements";
 				PRODUCT_NAME = "OpenTranslate Extension";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -893,7 +929,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = A4HHRH8Y9M;
+				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -908,7 +944,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"-framework",
@@ -916,7 +952,8 @@
 					"-framework",
 					WebKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mekedron.OpenTranslate;
+				PRODUCT_BUNDLE_IDENTIFIER = net.timhuang.opentranslate;
+				CODE_SIGN_ENTITLEMENTS = "macOS (App)/OpenTranslate.entitlements";
 				PRODUCT_NAME = OpenTranslate;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
@@ -935,7 +972,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = A4HHRH8Y9M;
+				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -950,7 +987,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"-framework",
@@ -958,7 +995,8 @@
 					"-framework",
 					WebKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mekedron.OpenTranslate;
+				PRODUCT_BUNDLE_IDENTIFIER = net.timhuang.opentranslate;
+				CODE_SIGN_ENTITLEMENTS = "macOS (App)/OpenTranslate.entitlements";
 				PRODUCT_NAME = OpenTranslate;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;

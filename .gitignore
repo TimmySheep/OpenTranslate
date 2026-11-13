@@ -47,3 +47,4 @@ xcuserdata/
 # Local scratch / validation (never committed)
 .validation/
 tmp/
+.dispatch/

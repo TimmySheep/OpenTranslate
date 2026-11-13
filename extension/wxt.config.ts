@@ -72,7 +72,7 @@ export default defineConfig({
       // Safari uses activeTab (its per-site permission model) so the toolbar
       // action works. Other browsers get offscreen/sidePanel (absent on Firefox).
       ...(browser === "safari"
-        ? ["activeTab"]
+        ? ["activeTab", "nativeMessaging"]
         : (browser !== "firefox" ? ["offscreen", "sidePanel"] : [])),
     ],
     host_permissions: [

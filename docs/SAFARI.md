@@ -13,8 +13,10 @@ iPhone 17 simulators, Node 26, pnpm 10.33. WXT builds Safari via `wxt build -b s
 targets by default.
 
 ## Identifiers
-- App bundle id: `com.mekedron.OpenTranslate`
-- Extension bundle id: `com.mekedron.OpenTranslate.Extension`
+- App bundle id: `net.timhuang.opentranslate`
+- Extension bundle id: `net.timhuang.opentranslate.extension`
+- Team: `JY5U4D6JD3` (App Store / TestFlight identity)
+- App Group: `group.net.timhuang.opentranslate`
 
 ## Two-tree model (important)
 - `extension/` is the source of truth; `pnpm build:safari` writes `extension/.output/safari-mv3`.
@@ -37,7 +39,7 @@ cd extension && pnpm build:safari      # → extension/.output/safari-mv3
 scripts/gen-xcode.sh
 # = xcrun safari-web-extension-converter \
 #     --project-location apple --app-name OpenTranslate \
-#     --bundle-identifier com.mekedron.OpenTranslate \
+#     --bundle-identifier net.timhuang.opentranslate \
 #     --swift --copy-resources --no-open --no-prompt --force \
 #     extension/.output/safari-mv3
 ```
@@ -84,6 +86,13 @@ Simulator builds may pass `CODE_SIGNING_ALLOWED=NO`. Settings are stored locally
 
 ## Hand edits to re-apply if the converter is re-run
 _(record here as they are made — signing team, Info.plist toggles, entitlements, app group)_
+
+- **App Group shared settings (feat/shared-settings-icloud).** See [`docs/SHARED-SETTINGS.md`](SHARED-SETTINGS.md).
+  - Entitlements on all four targets: `OpenTranslate.entitlements` with `group.net.timhuang.opentranslate` (portal registration pending).
+  - Shared Swift: `Shared (App+Extension)/SharedSettingsStore.swift` compiled into App + Extension.
+  - `SafariWebExtensionHandler` implements `sharedSettings.*` native messages (not echo-only).
+  - Manifest permission `nativeMessaging` on Safari builds (`wxt.config.ts`).
+  - Companion `Main.html` shows shared-settings status + target-language editor.
 
 - **iPad layout (universal app).** The iOS targets already build for iPhone **and** iPad
   (`TARGETED_DEVICE_FAMILY = "1,2"`), so no project-setting change is needed. But the

@@ -6,7 +6,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJ="$REPO_ROOT/apple/OpenTranslate/OpenTranslate.xcodeproj"
 SIM_NAME="${1:-iPhone 17}"
-APP_ID="com.mekedron.OpenTranslate"
+APP_ID="net.timhuang.opentranslate"
 DD="$REPO_ROOT/apple/DerivedData"
 [ -e "$PROJ" ] || { echo "Generate the Xcode project first: scripts/gen-xcode.sh"; exit 1; }
 
