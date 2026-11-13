@@ -26,6 +26,7 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
 
     @IBOutlet var webView: WKWebView!
     private var isObservingSharedSettings = false
+    private var isShowingSettingsPage = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -39,11 +40,10 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
         let controller = self.webView.configuration.userContentController
         controller.add(self, name: "controller")
         controller.add(self, name: "sharedSettings")
+        // Needed so the settings page can load ES modules from file://.
+        self.webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
 
-        self.webView.loadFileURL(
-            Bundle.main.url(forResource: "Main", withExtension: "html")!,
-            allowingReadAccessTo: Bundle.main.resourceURL!
-        )
+        loadAppPage()
 
         startObservingSharedSettingsChanges()
     }
@@ -52,7 +52,27 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
         stopObservingSharedSettingsChanges()
     }
 
+    private func loadAppPage() {
+        // Prefer the bundled options-app settings UI. Falls back to Main.html
+        // until the coordinator adds the `settings` folder reference to pbxproj.
+        if let settingsURL = Bundle.main.url(forResource: "options-app", withExtension: "html", subdirectory: "settings") {
+            isShowingSettingsPage = true
+            let accessRoot = settingsURL.deletingLastPathComponent()
+            self.webView.loadFileURL(settingsURL, allowingReadAccessTo: accessRoot)
+            return
+        }
+
+        isShowingSettingsPage = false
+        self.webView.loadFileURL(
+            Bundle.main.url(forResource: "Main", withExtension: "html")!,
+            allowingReadAccessTo: Bundle.main.resourceURL!
+        )
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if isShowingSettingsPage {
+            return
+        }
 #if os(iOS)
         webView.evaluateJavaScript("show('ios')")
 #elseif os(macOS)
