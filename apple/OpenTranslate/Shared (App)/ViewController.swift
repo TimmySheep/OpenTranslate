@@ -18,13 +18,20 @@ typealias PlatformViewController = NSViewController
 
 let extensionBundleIdentifier = "net.timhuang.opentranslate.extension"
 
+/// App-local theme key. Theme is not part of the App Group config protocol.
+private let appThemeDefaultsKey = "opentranslate.app.theme"
+private let defaultConfigSchemaVersion = 80
+
 class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMessageHandler {
 
     @IBOutlet var webView: WKWebView!
+    private var isObservingSharedSettings = false
+    private var isShowingSettingsPage = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        replaceWebViewForFileAccess()
         self.webView.navigationDelegate = self
 
 #if os(iOS)
@@ -35,6 +42,73 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
         controller.add(self, name: "controller")
         controller.add(self, name: "sharedSettings")
 
+        loadAppPage()
+
+        startObservingSharedSettingsChanges()
+    }
+
+    /// Storyboard WKWebView copies its configuration at init, so toggling
+    /// `allowFileAccessFromFileURLs` afterwards has no effect and ES modules
+    /// from `file://` never run. Replace it with a configuration created first.
+    private func replaceWebViewForFileAccess() {
+        let configuration = WKWebViewConfiguration()
+        configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+
+        let newView = WKWebView(frame: self.webView.frame, configuration: configuration)
+        newView.translatesAutoresizingMaskIntoConstraints = false
+        newView.navigationDelegate = self
+        #if DEBUG
+        if #available(macOS 13.3, iOS 16.4, *) {
+            newView.isInspectable = true
+        }
+        #endif
+
+        guard let parent = self.webView.superview else {
+            self.webView = newView
+            return
+        }
+        let old = self.webView!
+        parent.addSubview(newView)
+        // Pin to the superview, not the outgoing storyboard view — those
+        // anchors die when the old web view is removed, leaving a zero-size view.
+        NSLayoutConstraint.activate([
+            newView.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
+            newView.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
+            newView.topAnchor.constraint(equalTo: parent.topAnchor),
+            newView.bottomAnchor.constraint(equalTo: parent.bottomAnchor),
+        ])
+        old.removeFromSuperview()
+        self.webView = newView
+    }
+
+#if os(macOS)
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        guard isShowingSettingsPage, let window = view.window else { return }
+        window.styleMask.insert(.resizable)
+        window.minSize = NSSize(width: 800, height: 560)
+        if window.frame.width < 800 || window.frame.height < 560 {
+            window.setContentSize(NSSize(width: 1100, height: 740))
+        }
+    }
+#endif
+
+    deinit {
+        stopObservingSharedSettingsChanges()
+    }
+
+    private func loadAppPage() {
+        // Prefer the bundled options-app settings UI. Falls back to Main.html
+        // if the settings folder is missing from the app bundle.
+        if let settingsURL = Bundle.main.url(forResource: "options-app", withExtension: "html", subdirectory: "settings") {
+            isShowingSettingsPage = true
+            let accessRoot = settingsURL.deletingLastPathComponent()
+            self.webView.loadFileURL(settingsURL, allowingReadAccessTo: accessRoot)
+            return
+        }
+
+        isShowingSettingsPage = false
         self.webView.loadFileURL(
             Bundle.main.url(forResource: "Main", withExtension: "html")!,
             allowingReadAccessTo: Bundle.main.resourceURL!
@@ -42,7 +116,10 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-#if os(iOS)
+        if isShowingSettingsPage {
+            return
+        }
+        #if os(iOS)
         webView.evaluateJavaScript("show('ios')")
 #elseif os(macOS)
         webView.evaluateJavaScript("show('mac')")
@@ -101,7 +178,7 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
             guard let config = dict["config"] as? [String: Any] else { return }
             let schemaVersion = (dict["schemaVersion"] as? Int)
                 ?? (dict["schemaVersion"] as? NSNumber)?.intValue
-                ?? 80
+                ?? defaultConfigSchemaVersion
             let ts = Date().timeIntervalSince1970 * 1000
             let result = SharedSettingsStore.shared.write(
                 config: config,
@@ -117,6 +194,15 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
                 "lastModifiedAt": ts,
             ])
             pushSharedStatusToPage()
+            if result.ok {
+                pushStorageChanged(key: "config", value: config)
+            }
+        case "storage.get":
+            handleStorageGet(dict)
+        case "storage.set":
+            handleStorageSet(dict)
+        case "storage.setMeta":
+            handleStorageSetMeta(dict)
         default:
             break
         }
@@ -124,10 +210,10 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
 
     private func applyTargetLanguage(_ code: String) {
         var config: [String: Any]
-        var schemaVersion = 80
+        var schemaVersion = defaultConfigSchemaVersion
         if let envelope = SharedSettingsStore.shared.readEnvelope() {
             config = envelope.config
-            schemaVersion = envelope.meta.schemaVersion > 0 ? envelope.meta.schemaVersion : 80
+            schemaVersion = envelope.meta.schemaVersion > 0 ? envelope.meta.schemaVersion : defaultConfigSchemaVersion
         } else {
             // Minimal seed if extension has not migrated yet — extension sync will reconcile.
             config = [
@@ -157,6 +243,196 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
         ])
         pushSharedStatusToPage()
         pushSharedConfigToPage()
+        if result.ok {
+            pushStorageChanged(key: "config", value: config)
+        }
+    }
+
+    private func handleStorageGet(_ dict: [String: Any]) {
+        let requestId = storageRequestId(dict)
+        let key = dict["key"] as? String ?? ""
+        switch key {
+        case "config":
+            if let envelope = SharedSettingsStore.shared.readEnvelope() {
+                replyStorageResult(requestId: requestId, ok: true, value: envelope.config)
+            } else if SharedSettingsStore.shared.isAvailable {
+                replyStorageResult(requestId: requestId, ok: true)
+            } else {
+                replyStorageResult(requestId: requestId, ok: false, error: "app_group_unavailable")
+            }
+        case "theme":
+            if let theme = UserDefaults.standard.string(forKey: appThemeDefaultsKey) {
+                replyStorageResult(requestId: requestId, ok: true, value: theme)
+            } else {
+                replyStorageResult(requestId: requestId, ok: true)
+            }
+        default:
+            replyStorageResult(requestId: requestId, ok: false, error: "unsupported_key")
+        }
+    }
+
+    private func handleStorageSet(_ dict: [String: Any]) {
+        let requestId = storageRequestId(dict)
+        let key = dict["key"] as? String ?? ""
+        switch key {
+        case "config":
+            guard let config = dict["value"] as? [String: Any] else {
+                replyStorageResult(requestId: requestId, ok: false, error: "missing_config")
+                return
+            }
+            let schemaVersion = schemaVersionForWrite(dict)
+            let ts = Date().timeIntervalSince1970 * 1000
+            let result = SharedSettingsStore.shared.write(
+                config: config,
+                schemaVersion: schemaVersion,
+                lastModifiedAt: ts,
+                source: "app",
+                rejectIfOlder: false
+            )
+            if result.ok {
+                replyStorageResult(requestId: requestId, ok: true, value: config)
+                pushStorageChanged(key: "config", value: config)
+                pushSharedStatusToPage()
+            } else {
+                replyStorageResult(requestId: requestId, ok: false, error: result.reason ?? "write_failed")
+            }
+        case "theme":
+            guard let theme = dict["value"] as? String else {
+                replyStorageResult(requestId: requestId, ok: false, error: "missing_theme")
+                return
+            }
+            UserDefaults.standard.set(theme, forKey: appThemeDefaultsKey)
+            replyStorageResult(requestId: requestId, ok: true, value: theme)
+            pushStorageChanged(key: "theme", value: theme)
+        default:
+            replyStorageResult(requestId: requestId, ok: false, error: "unsupported_key")
+        }
+    }
+
+    private func handleStorageSetMeta(_ dict: [String: Any]) {
+        let requestId = storageRequestId(dict)
+        let key = dict["key"] as? String ?? ""
+        let meta = dict["meta"] as? [String: Any] ?? [:]
+        switch key {
+        case "config":
+            guard let envelope = SharedSettingsStore.shared.readEnvelope() else {
+                // Nothing to stamp yet (get/set will create the envelope).
+                replyStorageResult(requestId: requestId, ok: true)
+                return
+            }
+            let lastModifiedAt = (meta["lastModifiedAt"] as? Double)
+                ?? (meta["lastModifiedAt"] as? NSNumber)?.doubleValue
+                ?? envelope.meta.lastModifiedAt
+            let schemaVersion = envelope.meta.schemaVersion > 0
+                ? envelope.meta.schemaVersion
+                : defaultConfigSchemaVersion
+            let result = SharedSettingsStore.shared.write(
+                config: envelope.config,
+                schemaVersion: schemaVersion,
+                lastModifiedAt: lastModifiedAt,
+                source: envelope.meta.source ?? "app",
+                rejectIfOlder: false
+            )
+            if result.ok {
+                replyStorageResult(requestId: requestId, ok: true)
+            } else {
+                replyStorageResult(requestId: requestId, ok: false, error: result.reason ?? "write_failed")
+            }
+        case "theme":
+            replyStorageResult(requestId: requestId, ok: true)
+        default:
+            replyStorageResult(requestId: requestId, ok: false, error: "unsupported_key")
+        }
+    }
+
+    private func storageRequestId(_ dict: [String: Any]) -> String? {
+        if let value = dict["requestId"] as? String {
+            return value
+        }
+        if let value = dict["requestId"] as? NSNumber {
+            return value.stringValue
+        }
+        return nil
+    }
+
+    private func schemaVersionForWrite(_ dict: [String: Any]) -> Int {
+        if let value = dict["schemaVersion"] as? Int {
+            return value
+        }
+        if let value = dict["schemaVersion"] as? NSNumber {
+            return value.intValue
+        }
+        if let envelope = SharedSettingsStore.shared.readEnvelope(), envelope.meta.schemaVersion > 0 {
+            return envelope.meta.schemaVersion
+        }
+        return defaultConfigSchemaVersion
+    }
+
+    private func replyStorageResult(requestId: String?, ok: Bool, value: Any? = nil, error: String? = nil) {
+        var payload: [String: Any] = [
+            "type": "storage.result",
+            "ok": ok,
+        ]
+        if let requestId {
+            payload["requestId"] = requestId
+        }
+        if let value {
+            payload["value"] = value
+        }
+        if let error {
+            payload["error"] = error
+        }
+        notifyPage(result: payload)
+    }
+
+    private func pushStorageChanged(key: String, value: Any?) {
+        var payload: [String: Any] = [
+            "type": "storage.changed",
+            "key": key,
+        ]
+        if let value {
+            payload["value"] = value
+        }
+        notifyPage(result: payload)
+    }
+
+    private func startObservingSharedSettingsChanges() {
+        guard !isObservingSharedSettings else { return }
+        isObservingSharedSettings = true
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            observer,
+            { _, observer, _, _, _ in
+                guard let observer else { return }
+                let controller = Unmanaged<ViewController>.fromOpaque(observer).takeUnretainedValue()
+                DispatchQueue.main.async {
+                    controller.handleSharedSettingsChangedExternally()
+                }
+            },
+            SharedSettingsKeys.darwinNotifyName,
+            nil,
+            .deliverImmediately
+        )
+    }
+
+    private func stopObservingSharedSettingsChanges() {
+        guard isObservingSharedSettings else { return }
+        isObservingSharedSettings = false
+        CFNotificationCenterRemoveObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            Unmanaged.passUnretained(self).toOpaque(),
+            CFNotificationName(SharedSettingsKeys.darwinNotifyName),
+            nil
+        )
+    }
+
+    /// Pushes `storage.changed` when the App Group blob changes (including writes from the extension).
+    private func handleSharedSettingsChangedExternally() {
+        if let envelope = SharedSettingsStore.shared.readEnvelope() {
+            pushStorageChanged(key: "config", value: envelope.config)
+        }
+        pushSharedStatusToPage()
     }
 
     private func pushSharedStatusToPage() {

@@ -13,10 +13,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/base-ui/alert-dialog"
 import { Button } from "@/components/ui/base-ui/button"
+import { isAppSettingsMode } from "@/utils/app-settings-mode"
 import { sendMessage } from "@/utils/message"
 import { ConfigCard } from "../../components/config-card"
 
 export function ClearCacheConfig() {
+  if (isAppSettingsMode())
+    return null
+
   const [open, setOpen] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
 
