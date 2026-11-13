@@ -55,6 +55,10 @@
 		11EEF9032FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */; };
 		11EEF9042FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */; };
 		11EEF9052FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */; };
+		11EEF9112FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9102FE586BB003E1F8A /* CloudSettingsSync.swift */; };
+		11EEF9122FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9102FE586BB003E1F8A /* CloudSettingsSync.swift */; };
+		11EEF9132FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9102FE586BB003E1F8A /* CloudSettingsSync.swift */; };
+		11EEF9142FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF9102FE586BB003E1F8A /* CloudSettingsSync.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -132,6 +136,7 @@
 		11EEF8572FE586BC003E1F8A /* icon */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icon; path = Resources/icon; sourceTree = "<group>"; };
 		11EEF8582FE586BC003E1F8A /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
 		11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSettingsStore.swift; sourceTree = "<group>"; };
+		11EEF9102FE586BB003E1F8A /* CloudSettingsSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSettingsSync.swift; sourceTree = "<group>"; };
 		11EEF9062FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
 		11EEF9072FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
 		11EEF9082FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
@@ -211,6 +216,7 @@
 			isa = PBXGroup;
 			children = (
 				11EEF9012FE586BB003E1F8A /* SharedSettingsStore.swift */,
+				11EEF9102FE586BB003E1F8A /* CloudSettingsSync.swift */,
 			);
 			path = "Shared (App+Extension)";
 			sourceTree = "<group>";
@@ -499,6 +505,7 @@
 				11EEF8062FE586BB003E1F8A /* AppDelegate.swift in Sources */,
 				11EEF8082FE586BB003E1F8A /* SceneDelegate.swift in Sources */,
 				11EEF9022FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
+				11EEF9112FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -509,6 +516,7 @@
 				11EEF8392FE586BB003E1F8A /* ViewController.swift in Sources */,
 				11EEF8172FE586BB003E1F8A /* AppDelegate.swift in Sources */,
 				11EEF9032FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
+				11EEF9122FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -518,6 +526,7 @@
 			files = (
 				11EEF83C2FE586BB003E1F8A /* SafariWebExtensionHandler.swift in Sources */,
 				11EEF9042FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
+				11EEF9132FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -527,6 +536,7 @@
 			files = (
 				11EEF83D2FE586BB003E1F8A /* SafariWebExtensionHandler.swift in Sources */,
 				11EEF9052FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
+				11EEF9142FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -704,6 +714,7 @@
 				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "iOS (Extension)/OpenTranslate.entitlements";
 				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "OpenTranslate Extension";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -740,6 +751,7 @@
 				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "iOS (Extension)/OpenTranslate.entitlements";
 				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "OpenTranslate Extension";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -779,6 +791,7 @@
 				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "iOS (App)/OpenTranslate.entitlements";
 				INFOPLIST_FILE = "iOS (App)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = OpenTranslate;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -822,6 +835,7 @@
 				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "iOS (App)/OpenTranslate.entitlements";
 				INFOPLIST_FILE = "iOS (App)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = OpenTranslate;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
