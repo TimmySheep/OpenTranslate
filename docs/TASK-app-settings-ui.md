@@ -75,3 +75,24 @@ App（iOS + macOS）打开后显示**与 Safari 扩展完全一致的设置界�
 - 未登录 iCloud / iCloud 不可用时，App 行为与现在完全一致（降级，不报错）
 - App Group 原有同步路径不受影响
 
+
+## 并行分工与文件所有权（另一个 Bot 同时在跑 iCloud 任务）
+
+同一时间有另一个 Bot 在做「轻量 iCloud 同步」（任务书 `docs/TASK-icloud-sync.md`）。**两边并行，靠文件所有权隔离。**
+
+### 你（界面搬迁任务）拥有的文件
+
+- `extension/**`（含 `storage-adapter.ts`、`entrypoints/**`、`utils/safari-shared-settings/**`）
+- `apple/OpenTranslate/Shared (App)/Resources/**`
+- `apple/OpenTranslate/Shared (App)/ViewController.swift`
+- `apple/OpenTranslate/Shared (Extension)/SafariWebExtensionHandler.swift`
+
+### 你绝对不能碰的文件（属于 iCloud 任务）
+
+- `apple/OpenTranslate/Shared (App+Extension)/SharedSettingsStore.swift`
+- `apple/OpenTranslate/*/**.entitlements`
+- `apple/OpenTranslate/OpenTranslate.xcodeproj/project.pbxproj`
+
+**如果必须改 pbxproj**（例如为了把设置页资源加进 bundle）：**不要改**，在报告里写清需要加哪几行、由谁加，交给主控协调。改了就是阻断级冲突。
+
+读取 `SharedSettingsStore` 的现有 API 是允许的；改它的实现不允许。
