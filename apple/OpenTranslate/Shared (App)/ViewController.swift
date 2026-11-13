@@ -31,6 +31,7 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        replaceWebViewForFileAccess()
         self.webView.navigationDelegate = self
 
 #if os(iOS)
@@ -40,13 +41,58 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
         let controller = self.webView.configuration.userContentController
         controller.add(self, name: "controller")
         controller.add(self, name: "sharedSettings")
-        // Needed so the settings page can load ES modules from file://.
-        self.webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
 
         loadAppPage()
 
         startObservingSharedSettingsChanges()
     }
+
+    /// Storyboard WKWebView copies its configuration at init, so toggling
+    /// `allowFileAccessFromFileURLs` afterwards has no effect and ES modules
+    /// from `file://` never run. Replace it with a configuration created first.
+    private func replaceWebViewForFileAccess() {
+        let configuration = WKWebViewConfiguration()
+        configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+
+        let newView = WKWebView(frame: self.webView.frame, configuration: configuration)
+        newView.translatesAutoresizingMaskIntoConstraints = false
+        newView.navigationDelegate = self
+        #if DEBUG
+        if #available(macOS 13.3, iOS 16.4, *) {
+            newView.isInspectable = true
+        }
+        #endif
+
+        guard let parent = self.webView.superview else {
+            self.webView = newView
+            return
+        }
+        let old = self.webView!
+        parent.addSubview(newView)
+        // Pin to the superview, not the outgoing storyboard view — those
+        // anchors die when the old web view is removed, leaving a zero-size view.
+        NSLayoutConstraint.activate([
+            newView.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
+            newView.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
+            newView.topAnchor.constraint(equalTo: parent.topAnchor),
+            newView.bottomAnchor.constraint(equalTo: parent.bottomAnchor),
+        ])
+        old.removeFromSuperview()
+        self.webView = newView
+    }
+
+#if os(macOS)
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        guard isShowingSettingsPage, let window = view.window else { return }
+        window.styleMask.insert(.resizable)
+        window.minSize = NSSize(width: 800, height: 560)
+        if window.frame.width < 800 || window.frame.height < 560 {
+            window.setContentSize(NSSize(width: 1100, height: 740))
+        }
+    }
+#endif
 
     deinit {
         stopObservingSharedSettingsChanges()
@@ -54,7 +100,7 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
 
     private func loadAppPage() {
         // Prefer the bundled options-app settings UI. Falls back to Main.html
-        // until the coordinator adds the `settings` folder reference to pbxproj.
+        // if the settings folder is missing from the app bundle.
         if let settingsURL = Bundle.main.url(forResource: "options-app", withExtension: "html", subdirectory: "settings") {
             isShowingSettingsPage = true
             let accessRoot = settingsURL.deletingLastPathComponent()
@@ -73,7 +119,7 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
         if isShowingSettingsPage {
             return
         }
-#if os(iOS)
+        #if os(iOS)
         webView.evaluateJavaScript("show('ios')")
 #elseif os(macOS)
         webView.evaluateJavaScript("show('mac')")

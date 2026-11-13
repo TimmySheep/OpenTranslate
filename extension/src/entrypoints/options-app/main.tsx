@@ -78,4 +78,10 @@ async function initApp() {
   ))
 }
 
-void initApp()
+void initApp().catch((error) => {
+  const root = document.getElementById("root")
+  const message = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error)
+  console.error("options-app failed to start", error)
+  if (root)
+    root.textContent = message
+})

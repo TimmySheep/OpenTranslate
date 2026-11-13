@@ -69,15 +69,38 @@ export function createStaticI18n(options: StaticI18nOptions) {
     return options.language
   }
 
+  function resolveAssetURL(path: string = "", href?: string): string {
+    const base = href
+      ?? (typeof globalThis.location?.href === "string" ? globalThis.location.href : "https://opentranslate.app/options-app.html")
+    const directory = base.slice(0, base.lastIndexOf("/") + 1)
+    return new URL(String(path).replace(/^\//, ""), directory).href
+  }
+
   function install(target: typeof globalThis = globalThis) {
-    const i18n = { getMessage, getUILanguage }
-    const runtime = { id: "opentranslate-app" }
     const current = target as typeof globalThis & {
-      browser?: { runtime?: { id?: string }, i18n?: unknown }
-      chrome?: { runtime?: { id?: string }, i18n?: unknown }
+      browser?: {
+        runtime?: { id?: string, getManifest?: Function, getURL?: Function }
+        i18n?: { getMessage?: unknown, getUILanguage?: unknown }
+      }
+      chrome?: {
+        runtime?: { id?: string, getManifest?: Function, getURL?: Function }
+        i18n?: { getMessage?: unknown, getUILanguage?: unknown }
+      }
     }
-    current.browser = { ...current.browser, runtime: { ...current.browser?.runtime, ...runtime }, i18n }
-    current.chrome = { ...current.chrome, runtime: { ...current.chrome?.runtime, ...runtime }, i18n }
+    // Mutate in place so modules that already captured `browser` keep working.
+    const api = current.browser ?? current.chrome ?? {}
+    const runtime = { ...api.runtime }
+    runtime.id = "opentranslate-app"
+    runtime.getManifest = runtime.getManifest ?? (() => ({
+      manifest_version: 3,
+      name: "OpenTranslate",
+      version: "1.35.1",
+    }))
+    runtime.getURL = runtime.getURL ?? ((path: string = "") => resolveAssetURL(path))
+    api.runtime = runtime
+    api.i18n = { ...api.i18n, getMessage, getUILanguage }
+    current.browser = api
+    current.chrome = api
   }
 
   return { locale, getMessage, getUILanguage, install }

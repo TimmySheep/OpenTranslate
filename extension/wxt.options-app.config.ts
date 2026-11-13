@@ -60,9 +60,42 @@ export default defineConfig({
       // output layout (options-app.html next to chunks/ and assets/).
       const htmlPath = path.join(wxt.config.outDir, "options-app.html")
       const html = await readFile(htmlPath, "utf8")
-      const fixed = html
+      let fixed = html
         .replaceAll("../../../", "./")
         .replaceAll(" crossorigin", "")
+      const polyfill = `<script>
+(function () {
+  function getURL(path) {
+    var href = (globalThis.location && location.href) ? location.href : "https://opentranslate.app/options-app.html";
+    var directory = href.slice(0, href.lastIndexOf("/") + 1);
+    var relative = String(path || "");
+    if (relative.charAt(0) === "/") relative = relative.slice(1);
+    return new URL(relative, directory).href;
+  }
+  var runtime = (globalThis.browser && globalThis.browser.runtime) || {};
+  runtime.id = runtime.id || "opentranslate-app";
+  runtime.getManifest = runtime.getManifest || function () {
+    return { manifest_version: 3, name: "OpenTranslate", version: "1.35.1" };
+  };
+  runtime.getURL = runtime.getURL || getURL;
+  var i18n = (globalThis.browser && globalThis.browser.i18n) || {
+    getMessage: function () { return ""; },
+    getUILanguage: function () { return navigator.language || "en"; }
+  };
+  var api = globalThis.browser || {};
+  api.runtime = runtime;
+  api.i18n = i18n;
+  globalThis.browser = api;
+  globalThis.chrome = api;
+})();
+</script>
+`
+      if (!fixed.includes('id: "opentranslate-app"')) {
+        if (fixed.includes("<head>"))
+          fixed = fixed.replace("<head>", "<head>" + polyfill, 1)
+        else
+          fixed = polyfill + fixed
+      }
       if (fixed !== html)
         await writeFile(htmlPath, fixed)
     },

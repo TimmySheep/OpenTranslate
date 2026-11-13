@@ -61,4 +61,29 @@ describe("createStaticI18n", () => {
     expect(browser.i18n.getMessage("name")).toBe("OpenTranslate")
     expect(browser.i18n.getMessage("options_apiProviders_badges_featureCount", ["2"])).toBe("2 features")
   })
+
+  it("mutates an already-captured browser object instead of replacing it", () => {
+    const captured: { runtime?: { id?: string }, i18n?: { getMessage?: Function, getUILanguage?: Function } } = {
+      runtime: { id: "opentranslate-app" },
+      i18n: { getMessage: () => "", getUILanguage: () => "en" },
+    }
+    const target = { browser: captured, chrome: captured }
+    const i18n = createStaticI18n({ catalog, defaultLocale: "en", language: "en" })
+    i18n.install(target as unknown as typeof globalThis)
+    expect(target.browser).toBe(captured)
+    expect(captured.i18n?.getMessage?.("name")).toBe("OpenTranslate")
+  })
+
+  it("provides runtime.getManifest and getURL for options modules that call them at import time", () => {
+    const i18n = createStaticI18n({ catalog, defaultLocale: "en", language: "en" })
+    const target = {} as typeof globalThis
+    i18n.install(target)
+    const browser = (target as unknown as { browser: { runtime: { getManifest: () => { version: string, name: string }, getURL: (path: string) => string } } }).browser
+    expect(browser.runtime.getManifest()).toEqual({
+      manifest_version: 3,
+      name: "OpenTranslate",
+      version: "1.35.1",
+    })
+    expect(browser.runtime.getURL("/icon/128.png")).toContain("icon/128.png")
+  })
 })
