@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Settings | OpenTranslate</title>
+    <!-- Keep this page out of the Safari/Chrome/Firefox/Edge extension bundle.
+         The dedicated options-app build overrides include/exclude via filterEntrypoints. -->
+    <meta
+      name="manifest.exclude"
+      content="['chrome', 'firefox', 'edge', 'safari']"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
