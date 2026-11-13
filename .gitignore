@@ -18,9 +18,10 @@ web-ext.config.ts
 !.env.local.example
 
 # ───────── Xcode / Apple (apple/) ─────────
-# Generated web-extension bundle copied into the Xcode project (11 MB, regenerable).
+# Generated web-extension / App-settings bundles copied into the Xcode project (regenerable).
 # Recreate with: scripts/build-safari.sh && scripts/sync-resources.sh
 /apple/OpenTranslate/Shared (Extension)/Resources/
+/apple/OpenTranslate/Shared (App)/Resources/settings/
 build/
 DerivedData/
 *.xcuserstate
