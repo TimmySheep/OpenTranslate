@@ -22,9 +22,17 @@ enum CloudSettingsSyncTests {
         failed += check("deeply nested apiKey is not copied even if under a allowed parent") { try nestedAPIKeyNotCopied() }
         failed += check("empty extract yields no payload") { try emptyExtractIsNil() }
         failed += check("payloadContainsAPIKey is false for a clean payload") { try detectorClean() }
+        failed += check("push mirrors whitelist and omits API key") { try pushMirrorsWithoutAPIKey() }
+        failed += check("merge pulls newer iCloud fields and keeps local API key") { try mergePullsAndPreservesSecrets() }
+        failed += check("merge pushes newer local whitelist") { try mergePushesNewerLocal() }
+        failed += check("inbound tainted payload is re-filtered") { try taintedInboundIsRefiltered() }
+        failed += check("unavailable iCloud is a silent no-op") { try unavailableCloudIsNoop() }
+        failed += check("store write mirrors whitelist only") { try storeWriteMirrorsWhitelist() }
+        failed += check("store first read pulls newer iCloud onto App Group") { try storeReadPullsNewerCloud() }
+        failed += check("store write still succeeds when iCloud is down") { try storeWriteWorksWithoutCloud() }
 
         if failed == 0 {
-            print("CloudSettingsSyncTests: all 8 passed")
+            print("CloudSettingsSyncTests: all 17 passed")
             exit(0)
         } else {
             print("CloudSettingsSyncTests: \(failed) failed")
@@ -227,6 +235,233 @@ enum CloudSettingsSyncTests {
         }
         if CloudSettingsSync.payloadContainsAPIKey(payload) {
             try fail("clean payload flagged as containing API key")
+        }
+    }
+
+    // MARK: - Memory store
+
+    private final class MemoryCloudStore: CloudKeyValueStoring {
+        var available = true
+        private var storage: [String: Data] = [:]
+
+        var isAvailable: Bool { available }
+
+        func data(forKey key: String) -> Data? { storage[key] }
+
+        func set(_ data: Data?, forKey key: String) {
+            if let data {
+                storage[key] = data
+            } else {
+                storage.removeValue(forKey: key)
+            }
+        }
+
+        func payloadJSON() throws -> String {
+            guard let data = storage[CloudSettingsKeys.payload] else { return "<empty>" }
+            return String(data: data, encoding: .utf8) ?? "<binary>"
+        }
+    }
+
+    private static func fullLocalConfig() -> [String: Any] {
+        [
+            "language": [
+                "sourceCode": "auto",
+                "targetCode": "zho",
+                "level": "intermediate",
+            ],
+            "translate": [
+                "providerId": "openai-default",
+                "mode": "bilingual",
+            ],
+            "theme": "dark",
+            "fontSize": 16,
+            "providersConfig": [
+                ["id": "openai-default", "apiKey": "sk-THIS-MUST-NOT-SYNC"],
+            ],
+        ]
+    }
+
+    private static func pushMirrorsWithoutAPIKey() throws {
+        let store = MemoryCloudStore()
+        let ok = CloudSettingsSync.push(
+            config: fullLocalConfig(),
+            schemaVersion: 80,
+            lastModifiedAt: 1000,
+            to: store
+        )
+        if !ok { try fail("push should succeed") }
+        let blob = try store.payloadJSON()
+        print("PUSH_PAYLOAD  \(blob)")
+        if blob.contains("sk-THIS-MUST-NOT-SYNC") || blob.lowercased().contains("apikey") || blob.contains("providersConfig") {
+            try fail("push leaked secrets: \(blob)")
+        }
+        if !blob.contains("\"targetCode\":\"zho\"") { try fail("push missing targetCode: \(blob)") }
+    }
+
+    private static func mergePullsAndPreservesSecrets() throws {
+        let store = MemoryCloudStore()
+        let cloud = CloudSettingsSync.makePayload(
+            from: ["language": ["sourceCode": "eng", "targetCode": "jpn"], "translate": ["mode": "translationOnly"]],
+            schemaVersion: 80,
+            lastModifiedAt: 5000
+        )!
+        store.set(try cloud.jsonData(), forKey: CloudSettingsKeys.payload)
+
+        let local = fullLocalConfig()
+        let meta = SharedConfigMeta(schemaVersion: 80, lastModifiedAt: 1000, source: "extension")
+        let outcome = CloudSettingsSync.merge(local: (local, meta), store: store)
+        if outcome.result != .pulledFromCloud { try fail("expected pulledFromCloud, got \(outcome.result)") }
+        let language = outcome.config?["language"] as? [String: Any] ?? [:]
+        if language["targetCode"] as? String != "jpn" { try fail("targetCode not pulled") }
+        if language["sourceCode"] as? String != "eng" { try fail("sourceCode not pulled") }
+        if language["level"] as? String != "intermediate" { try fail("local language.level was dropped") }
+        let providers = outcome.config?["providersConfig"] as? [[String: Any]]
+        if providers?.first?["apiKey"] as? String != "sk-THIS-MUST-NOT-SYNC" {
+            try fail("local API key was not preserved")
+        }
+        if (outcome.config?["translate"] as? [String: Any])?["mode"] as? String != "translationOnly" {
+            try fail("mode not pulled")
+        }
+    }
+
+    private static func mergePushesNewerLocal() throws {
+        let store = MemoryCloudStore()
+        let older = CloudSettingsSync.makePayload(
+            from: ["language": ["sourceCode": "eng", "targetCode": "fra"]],
+            schemaVersion: 80,
+            lastModifiedAt: 1000
+        )!
+        store.set(try older.jsonData(), forKey: CloudSettingsKeys.payload)
+
+        let outcome = CloudSettingsSync.merge(
+            local: (fullLocalConfig(), SharedConfigMeta(schemaVersion: 80, lastModifiedAt: 4000, source: "app")),
+            store: store
+        )
+        if outcome.result != .pushedToCloud { try fail("expected pushedToCloud, got \(outcome.result)") }
+        let blob = try store.payloadJSON()
+        if !blob.contains("\"targetCode\":\"zho\"") { try fail("cloud not updated: \(blob)") }
+        if blob.contains("sk-THIS-MUST-NOT-SYNC") { try fail("push on merge leaked API key") }
+    }
+
+    private static func taintedInboundIsRefiltered() throws {
+        let tainted: [String: Any] = [
+            "schemaVersion": 80,
+            "lastModifiedAt": 9,
+            "config": [
+                "language": ["sourceCode": "eng", "targetCode": "zho"],
+                "providersConfig": [["apiKey": "sk-from-cloud"]],
+            ],
+        ]
+        let data = try JSONSerialization.data(withJSONObject: tainted, options: [.sortedKeys])
+        guard let parsed = CloudSettingsSync.parsePayload(from: data) else {
+            try fail("expected parse to keep whitelist fields")
+        }
+        let blob = try String(data: parsed.jsonData(), encoding: .utf8) ?? ""
+        if blob.contains("sk-from-cloud") || blob.contains("providersConfig") {
+            try fail("tainted inbound leaked: \(blob)")
+        }
+        if CloudSettingsSync.payloadContainsAPIKey(parsed) {
+            try fail("re-filtered payload still flagged")
+        }
+    }
+
+    private static func unavailableCloudIsNoop() throws {
+        let store = MemoryCloudStore()
+        store.available = false
+        let pushed = CloudSettingsSync.push(
+            config: fullLocalConfig(),
+            schemaVersion: 80,
+            lastModifiedAt: 1,
+            to: store
+        )
+        if pushed { try fail("push should fail closed when iCloud is down") }
+        if try store.payloadJSON() != "<empty>" { try fail("unavailable store was written") }
+        let outcome = CloudSettingsSync.merge(
+            local: (fullLocalConfig(), SharedConfigMeta(schemaVersion: 80, lastModifiedAt: 1, source: "app")),
+            store: store
+        )
+        if outcome.result != .skipped(reason: "icloud_unavailable") {
+            try fail("expected skipped, got \(outcome.result)")
+        }
+        if (outcome.config?["providersConfig"] as? [[String: Any]])?.first?["apiKey"] as? String != "sk-THIS-MUST-NOT-SYNC" {
+            try fail("local config changed while iCloud was down")
+        }
+    }
+
+    private static func makeIsolatedDefaults() -> UserDefaults {
+        let suite = "net.timhuang.opentranslate.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
+
+    private static func storeWriteMirrorsWhitelist() throws {
+        let cloud = MemoryCloudStore()
+        let defaults = makeIsolatedDefaults()
+        let store = SharedSettingsStore(defaults: defaults, cloudStore: cloud)
+        let result = store.write(
+            config: fullLocalConfig(),
+            schemaVersion: 80,
+            lastModifiedAt: 2000,
+            source: "app"
+        )
+        if !result.ok { try fail("write failed: \(result.reason ?? "?")") }
+        let blob = try cloud.payloadJSON()
+        print("STORE_PUSH_PAYLOAD  \(blob)")
+        if blob.contains("sk-THIS-MUST-NOT-SYNC") || blob.lowercased().contains("apikey") {
+            try fail("store write leaked API key: \(blob)")
+        }
+        let local = store.readEnvelopeRawForTests()
+        if (local?.config["providersConfig"] as? [[String: Any]])?.first?["apiKey"] as? String != "sk-THIS-MUST-NOT-SYNC" {
+            try fail("local App Group lost the API key")
+        }
+    }
+
+    private static func storeReadPullsNewerCloud() throws {
+        let cloud = MemoryCloudStore()
+        let defaults = makeIsolatedDefaults()
+        let writer = SharedSettingsStore(defaults: defaults, cloudStore: MemoryCloudStore())
+        _ = writer.write(
+            config: fullLocalConfig(),
+            schemaVersion: 80,
+            lastModifiedAt: 1000,
+            source: "app",
+            mirrorToCloud: false
+        )
+        let remote = CloudSettingsSync.makePayload(
+            from: ["language": ["sourceCode": "deu", "targetCode": "kor"], "theme": "light"],
+            schemaVersion: 80,
+            lastModifiedAt: 9000
+        )!
+        cloud.set(try remote.jsonData(), forKey: CloudSettingsKeys.payload)
+
+        let reader = SharedSettingsStore(defaults: defaults, cloudStore: cloud)
+        guard let envelope = reader.readEnvelope() else { try fail("expected envelope after pull") }
+        let language = envelope.config["language"] as? [String: Any] ?? [:]
+        if language["targetCode"] as? String != "kor" { try fail("store did not pull targetCode") }
+        if language["level"] as? String != "intermediate" { try fail("store dropped language.level") }
+        if (envelope.config["providersConfig"] as? [[String: Any]])?.first?["apiKey"] as? String != "sk-THIS-MUST-NOT-SYNC" {
+            try fail("pull overwrote API key")
+        }
+        if envelope.config["theme"] as? String != "light" { try fail("theme not pulled") }
+        if envelope.meta.source != "icloud" { try fail("source should be icloud, got \(envelope.meta.source ?? "nil")") }
+    }
+
+    private static func storeWriteWorksWithoutCloud() throws {
+        let cloud = MemoryCloudStore()
+        cloud.available = false
+        let store = SharedSettingsStore(defaults: makeIsolatedDefaults(), cloudStore: cloud)
+        let result = store.write(
+            config: fullLocalConfig(),
+            schemaVersion: 80,
+            lastModifiedAt: 3,
+            source: "app"
+        )
+        if !result.ok { try fail("write should succeed when iCloud is down: \(result.reason ?? "?")") }
+        if try cloud.payloadJSON() != "<empty>" { try fail("unavailable cloud was written") }
+        guard let envelope = store.readEnvelope() else { try fail("local read failed") }
+        if (envelope.config["language"] as? [String: Any])?["targetCode"] as? String != "zho" {
+            try fail("local config missing after degraded write")
         }
     }
 }
