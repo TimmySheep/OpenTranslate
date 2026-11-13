@@ -23,6 +23,8 @@
 		11EEF8352FE586BB003E1F8A /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF7F82FE586BB003E1F8A /* Style.css */; };
 		11EEF8362FE586BB003E1F8A /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF7F92FE586BB003E1F8A /* Script.js */; };
 		11EEF8372FE586BB003E1F8A /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF7F92FE586BB003E1F8A /* Script.js */; };
+		11EEF90C2FE586BB003E1F8A /* settings in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF90B2FE586BB003E1F8A /* settings */; };
+		11EEF90D2FE586BB003E1F8A /* settings in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF90B2FE586BB003E1F8A /* settings */; };
 		11EEF8382FE586BB003E1F8A /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF7FA2FE586BB003E1F8A /* ViewController.swift */; };
 		11EEF8392FE586BB003E1F8A /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF7FA2FE586BB003E1F8A /* ViewController.swift */; };
 		11EEF83A2FE586BB003E1F8A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */; };
@@ -134,6 +136,7 @@
 		11EEF9072FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
 		11EEF9082FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
 		11EEF9092FE586BB003E1F8A /* OpenTranslate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenTranslate.entitlements; sourceTree = "<group>"; };
+		11EEF90B2FE586BB003E1F8A /* settings */ = {isa = PBXFileReference; lastKnownFileType = folder; path = settings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -199,6 +202,7 @@
 				11EEF7F72FE586BB003E1F8A /* Icon.png */,
 				11EEF7F82FE586BB003E1F8A /* Style.css */,
 				11EEF7F92FE586BB003E1F8A /* Script.js */,
+				11EEF90B2FE586BB003E1F8A /* settings */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -432,6 +436,7 @@
 				11EEF83A2FE586BB003E1F8A /* Assets.xcassets in Resources */,
 				11EEF80E2FE586BB003E1F8A /* Main.storyboard in Resources */,
 				11EEF8342FE586BB003E1F8A /* Style.css in Resources */,
+				11EEF90C2FE586BB003E1F8A /* settings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -445,6 +450,7 @@
 				11EEF8372FE586BB003E1F8A /* Script.js in Resources */,
 				11EEF83B2FE586BB003E1F8A /* Assets.xcassets in Resources */,
 				11EEF8312FE586BB003E1F8A /* Main.html in Resources */,
+				11EEF90D2FE586BB003E1F8A /* settings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
