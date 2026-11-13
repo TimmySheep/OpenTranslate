@@ -708,6 +708,7 @@
 				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "iOS (Extension)/OpenTranslate.entitlements";
 				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "OpenTranslate Extension";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -744,6 +745,7 @@
 				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "iOS (Extension)/OpenTranslate.entitlements";
 				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "OpenTranslate Extension";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -783,6 +785,7 @@
 				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "iOS (App)/OpenTranslate.entitlements";
 				INFOPLIST_FILE = "iOS (App)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = OpenTranslate;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -826,6 +829,7 @@
 				DEVELOPMENT_TEAM = JY5U4D6JD3;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "iOS (App)/OpenTranslate.entitlements";
 				INFOPLIST_FILE = "iOS (App)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = OpenTranslate;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
