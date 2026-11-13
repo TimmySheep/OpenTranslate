@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react"
 import { browser, i18n } from "#imports"
+import { isAppSettingsMode } from "@/utils/app-settings-mode"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -10,6 +11,9 @@ import {
 } from "@/components/ui/base-ui/sidebar"
 
 export function ToolsNav() {
+  if (isAppSettingsMode())
+    return null
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{i18n.t("options.sidebar.tools")}</SidebarGroupLabel>

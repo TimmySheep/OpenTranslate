@@ -12,6 +12,7 @@ import { batchQueueConfigSchema } from "@/types/config/translate"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
 import { calculateAverageSavePercentage } from "@/utils/batch-request-record"
 import { MIN_BATCH_CHARACTERS, MIN_BATCH_ITEMS } from "@/utils/constants/translate"
+import { isAppSettingsMode } from "@/utils/app-settings-mode"
 import { sendMessage } from "@/utils/message"
 import { ConfigCard } from "../../components/config-card"
 
@@ -105,9 +106,11 @@ function BatchNumberSelector({ property }: { property: KeyOfBatchQueueConfig }) 
                 [property]: newConfigValue,
               },
             })
-            void sendMessage("setTranslateBatchQueueConfig", {
-              [property]: newConfigValue,
-            })
+            if (!isAppSettingsMode()) {
+              void sendMessage("setTranslateBatchQueueConfig", {
+                [property]: newConfigValue,
+              })
+            }
           }
           else {
             toast.error(configParseResult.error?.issues[0].message)

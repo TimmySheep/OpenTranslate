@@ -7,6 +7,7 @@ import {
   setStorageAdapter,
   storageAdapter,
 } from "@/utils/atoms/storage-adapter"
+import { enableAppSettingsMode } from "@/utils/app-settings-mode"
 import { CONFIG_STORAGE_KEY, DEFAULT_CONFIG, THEME_STORAGE_KEY } from "@/utils/constants/config"
 
 /**
@@ -14,6 +15,7 @@ import { CONFIG_STORAGE_KEY, DEFAULT_CONFIG, THEME_STORAGE_KEY } from "@/utils/c
  * Must run at App entrypoint boot, not in the Safari extension options page.
  */
 export function installAppStorageAdapter() {
+  enableAppSettingsMode()
   setStorageAdapter(createBridgeAdapter())
 }
 
