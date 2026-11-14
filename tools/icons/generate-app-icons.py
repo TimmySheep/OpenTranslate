@@ -25,7 +25,8 @@ LARGE_ICON_PATH = APP_DIR / "Assets.xcassets" / "LargeIcon.imageset" / "128.png"
 RESOURCE_ICON_PATH = APP_DIR / "Resources" / "Icon.png"
 BLACK_THRESHOLD = 16
 SILHOUETTE_THRESHOLD = 48
-DIFFUSION_PASSES = 128
+DIFFUSION_PASSES = 32
+DIFFUSION_RADIUS = 12
 MAC_ART_SIZE = 824
 MAC_CANVAS_SIZE = 1024
 
@@ -162,7 +163,7 @@ def diffuse_black_corners(crop: Image.Image) -> tuple[Image.Image, Image.Image]:
         bytes(0 if is_known else 255 for is_known in known),
     )
     for _ in range(DIFFUSION_PASSES):
-        blurred = extended.filter(ImageFilter.BoxBlur(radius=1))
+        blurred = extended.filter(ImageFilter.BoxBlur(radius=DIFFUSION_RADIUS))
         extended.paste(blurred, (0, 0), fill_mask)
 
     alpha = Image.frombytes(
