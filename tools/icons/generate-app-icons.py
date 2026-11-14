@@ -24,7 +24,7 @@ APP_ICON_DIR = APP_DIR / "Assets.xcassets" / "AppIcon.appiconset"
 LARGE_ICON_PATH = APP_DIR / "Assets.xcassets" / "LargeIcon.imageset" / "128.png"
 RESOURCE_ICON_PATH = APP_DIR / "Resources" / "Icon.png"
 BLACK_THRESHOLD = 16
-SILHOUETTE_THRESHOLD = 48
+SILHOUETTE_THRESHOLD = 128
 DIFFUSION_PASSES = 32
 DIFFUSION_RADIUS = 12
 MAC_ART_SIZE = 824
@@ -117,11 +117,18 @@ def diffuse_black_corners(crop: Image.Image) -> tuple[Image.Image, Image.Image]:
     # Start each empty pixel from the closest horizontal edge pixel. This
     # guarantees a non-black initial image; mean diffusion below removes the
     # row-wise extension's directional bias.
-    for y in range(height):
+    row_seeds = [
+        [x for x in range(width) if known[y * width + x]]
+        for y in range(height)
+    ]
+    nonempty_rows = [y for y, seeds in enumerate(row_seeds) if seeds]
+    if not nonempty_rows:
+        raise ValueError("Icon silhouette is empty")
+
+    for y, seed_positions in enumerate(row_seeds):
         row_start = y * width
-        seed_positions = [x for x in range(width) if known[row_start + x]]
         if not seed_positions:
-            raise ValueError(f"Silhouette has no pixels on row {y}")
+            continue
 
         left_seed = [-1] * width
         right_seed = [-1] * width
@@ -155,6 +162,18 @@ def diffuse_black_corners(crop: Image.Image) -> tuple[Image.Image, Image.Image]:
             pixels[target_offset : target_offset + 3] = pixels[
                 source_offset : source_offset + 3
             ]
+
+    # The brightest-pixel silhouette can be one row shorter than the crop.
+    # Extend such empty rows from the nearest already-initialized row.
+    for y, seed_positions in enumerate(row_seeds):
+        if seed_positions:
+            continue
+        source_y = min(nonempty_rows, key=lambda candidate: abs(candidate - y))
+        start = y * width * 3
+        source_start = source_y * width * 3
+        pixels[start : start + width * 3] = pixels[
+            source_start : source_start + width * 3
+        ]
 
     extended = Image.frombytes("RGB", crop.size, bytes(pixels))
     fill_mask = Image.frombytes(
