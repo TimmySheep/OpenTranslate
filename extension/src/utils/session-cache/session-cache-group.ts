@@ -1,7 +1,11 @@
 import type { ProxyResponse } from "@/types/proxy-fetch"
-import { storage } from "#imports"
+import { z } from "zod"
 import { DEFAULT_PROXY_CACHE_TTL_MS } from "@/utils/constants/proxy-fetch"
 import { logger } from "@/utils/logger"
+import { storageAdapter } from "@/utils/atoms/storage-adapter"
+
+const anySchema = z.custom<unknown>(() => true)
+const keysSchema = z.array(z.string())
 
 interface CacheMetadata extends Record<string, unknown> {
   timestamp: number
@@ -28,9 +32,9 @@ export class SessionCache {
     if (this.isInitialized)
       return
 
-    const existing = await storage.getItem<string[]>(this.keysListKey)
+    const existing = await storageAdapter.get<string[] | null>(this.keysListKey, null, keysSchema.nullable())
     if (existing === null) {
-      await storage.setItem(this.keysListKey, [])
+      await storageAdapter.set(this.keysListKey, [], keysSchema)
     }
     this.isInitialized = true
   }
@@ -39,8 +43,8 @@ export class SessionCache {
     try {
       const key = this.makeKey(reqMethod, targetUrl)
       const [item, metadata] = await Promise.all([
-        storage.getItem<CachedItem>(key),
-        storage.getMeta<CacheMetadata>(key),
+        storageAdapter.get<CachedItem | null>(key, null, anySchema as z.ZodType<CachedItem | null>),
+        storageAdapter.getMeta<CacheMetadata>(key),
       ])
 
       if (!item || !metadata) {
@@ -70,17 +74,17 @@ export class SessionCache {
 
       // Set cache item and metadata in parallel
       await Promise.all([
-        storage.setItem(key, response),
-        storage.setMeta<CacheMetadata>(key, {
+        storageAdapter.set(key, response, anySchema as z.ZodType<CachedItem>),
+        storageAdapter.setMeta(key, {
           timestamp: now,
         }),
       ])
 
       // Track this key for group clearing
-      const keysList = await storage.getItem<string[]>(this.keysListKey) || []
+      const keysList = await storageAdapter.get<string[]>(this.keysListKey, [], keysSchema)
       if (!keysList.includes(key)) {
         keysList.push(key)
-        await storage.setItem(this.keysListKey, keysList)
+        await storageAdapter.set(this.keysListKey, keysList, keysSchema)
       }
 
       logger.info("[SessionCache] Cache set:", { reqMethod, targetUrl })
@@ -98,14 +102,13 @@ export class SessionCache {
 
       // Remove both data and metadata in parallel
       await Promise.all([
-        storage.removeItem(key),
-        storage.removeMeta(key),
+        storageAdapter.remove(key, true),
       ])
 
       // Remove from keys list
-      const keysList = await storage.getItem<string[]>(this.keysListKey) || []
+      const keysList = await storageAdapter.get<string[]>(this.keysListKey, [], keysSchema)
       const updatedKeysList = keysList.filter(k => k !== key)
-      await storage.setItem(this.keysListKey, updatedKeysList)
+      await storageAdapter.set(this.keysListKey, updatedKeysList, keysSchema)
     }
     catch (error) {
       logger.error("[SessionCache] Delete error:", error)
@@ -117,20 +120,15 @@ export class SessionCache {
       await this.ensureKeysListInitialized()
 
       // Get all tracked keys for this group
-      const keysList = await storage.getItem<string[]>(this.keysListKey) || []
+      const keysList = await storageAdapter.get<string[]>(this.keysListKey, [], keysSchema)
 
       if (keysList.length > 0) {
         // Use bulk removal for better performance
-        await storage.removeItems(
-          keysList.map(key => ({
-            key: key as any,
-            options: { removeMeta: true }, // Also remove metadata
-          })),
-        )
+        await storageAdapter.removeMany(keysList)
       }
 
       // Clear the keys list itself
-      await storage.removeItem(this.keysListKey)
+      await storageAdapter.remove(this.keysListKey)
       this.isInitialized = false // Reset initialization flag
 
       logger.info("[SessionCache] Cleared cache:", { count: keysList.length })

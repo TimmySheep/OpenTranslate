@@ -24,13 +24,14 @@ import { createXai } from "@ai-sdk/xai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { createOllama } from "ollama-ai-provider-v2"
 import { createMinimax } from "vercel-minimax-ai-provider"
-import { storage } from "#imports"
+import { z } from "zod"
 import { DEFAULT_AZURE_API_MODE, isCustomLLMProvider } from "@/types/config/provider"
 import { compactObject } from "@/types/utils"
 import { getLLMProvidersConfig, getProviderConfigById } from "../config/helpers"
 import { CONFIG_STORAGE_KEY } from "../constants/config"
 import { getProviderHeadersWithOverride } from "./headers"
 import { resolveModelId } from "./model-id"
+import { storageAdapter } from "../atoms/storage-adapter"
 
 const CREATE_AI_MAPPER = {
   "siliconflow": createOpenAICompatible,
@@ -85,7 +86,7 @@ function getAzureApiMode(providerConfig: LLMProviderConfig): AzureApiMode {
 }
 
 async function getLanguageModelById(providerId: string) {
-  const config = await storage.getItem<Config>(`local:${CONFIG_STORAGE_KEY}`)
+  const config = await storageAdapter.get<Config | null>(CONFIG_STORAGE_KEY, null, z.custom<Config | null>(() => true))
   if (!config) {
     throw new Error("Config not found")
   }

@@ -5,7 +5,10 @@ import { isNonNullish } from "@/utils/utils"
 export type StorageAdapter = {
   get: <T>(key: string, fallback: T, schema: ZodSchema<T>) => Promise<T>
   set: <T>(key: string, value: T, schema: ZodSchema<T>) => Promise<void>
+  getMeta: <T extends Record<string, unknown>>(key: string) => Promise<T | null>
   setMeta: (key: string, meta: Record<string, unknown>) => Promise<void>
+  remove: (key: string, removeMeta?: boolean) => Promise<void>
+  removeMany: (keys: string[]) => Promise<void>
   watch: <T>(key: string, callback: (newValue: T) => void) => () => void
 }
 
@@ -14,9 +17,10 @@ export type StorageAdapter = {
  * Behavior must stay identical to the pre-extraction implementation.
  */
 export function createWxtStorageAdapter(): StorageAdapter {
+  const storageKey = (key: string): `local:${string}` | `session:${string}` => key.startsWith("session:") ? key as `session:${string}` : `local:${key}`
   return {
     async get<T>(key: string, fallback: T, schema: ZodSchema<T>): Promise<T> {
-      const value = await storage.getItem<T>(`local:${key}`)
+      const value = await storage.getItem<T>(storageKey(key))
       if (isNonNullish(value)) {
         const parsedValue = schema.safeParse(value)
         if (parsedValue.success) {
@@ -28,17 +32,26 @@ export function createWxtStorageAdapter(): StorageAdapter {
     async set<T>(key: string, value: T, schema: ZodSchema<T>) {
       const parsedValue = schema.safeParse(value)
       if (parsedValue.success) {
-        await storage.setItem(`local:${key}`, parsedValue.data)
+        await storage.setItem(storageKey(key), parsedValue.data)
       }
       else {
         throw new Error(parsedValue.error.message)
       }
     },
+    async getMeta<T extends Record<string, unknown>>(key: string): Promise<T | null> {
+      return await storage.getMeta<T>(storageKey(key)) ?? null
+    },
     async setMeta(key: string, meta: Record<string, unknown>) {
-      await storage.setMeta(`local:${key}`, meta)
+      await storage.setMeta(storageKey(key), meta)
+    },
+    async remove(key: string, removeMeta = false) {
+      await storage.removeItem(storageKey(key), { removeMeta })
+    },
+    async removeMany(keys: string[]) {
+      await storage.removeItems(keys.map(key => ({ key: storageKey(key) as any, options: { removeMeta: true } })))
     },
     watch<T>(key: string, callback: (newValue: T) => void) {
-      const unwatch = storage.watch<T>(`local:${key}`, (newValue) => {
+      const unwatch = storage.watch<T>(storageKey(key), (newValue) => {
         if (isNonNullish(newValue))
           callback(newValue)
       })
@@ -68,7 +81,10 @@ export function resetStorageAdapter() {
 export const storageAdapter: StorageAdapter = {
   get: (key, fallback, schema) => currentAdapter.get(key, fallback, schema),
   set: (key, value, schema) => currentAdapter.set(key, value, schema),
+  getMeta: key => currentAdapter.getMeta(key),
   setMeta: (key, meta) => currentAdapter.setMeta(key, meta),
+  remove: (key, removeMeta) => currentAdapter.remove(key, removeMeta),
+  removeMany: keys => currentAdapter.removeMany(keys),
   watch: (key, callback) => currentAdapter.watch(key, callback),
 }
 
@@ -255,6 +271,11 @@ export function createBridgeAdapter(options: CreateBridgeAdapterOptions = {}): S
         throw new Error(parsedValue.error.message)
       }
     },
+    async getMeta<T extends Record<string, unknown>>(_key: string): Promise<T | null> {
+      return null
+    },
+    async remove() {},
+    async removeMany() {},
     async setMeta(key: string, meta: Record<string, unknown>) {
       await send({ type: STORAGE_BRIDGE.setMeta, key, meta })
     },

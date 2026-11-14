@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { z } from "zod"
+import type { StorageAdapter } from "@/utils/atoms/storage-adapter"
 
 const getItem = vi.fn()
 const setItem = vi.fn()
@@ -61,17 +62,20 @@ describe("options-app bootstrap", () => {
         targetCode: "jpn",
       },
     }
-    const get = vi.fn(async (key: string, fallback: unknown) => {
+    const get = vi.fn(async <T>(key: string, fallback: T, _schema: z.ZodType<T>): Promise<T> => {
       if (key === "config")
-        return config
+        return config as T
       if (key === "theme")
-        return "dark"
+        return "dark" as T
       return fallback
     })
     setStorageAdapter({
-      get,
+      get: get as StorageAdapter["get"],
       set: vi.fn(),
+      getMeta: vi.fn(),
       setMeta: vi.fn(),
+      remove: vi.fn(),
+      removeMany: vi.fn(),
       watch: vi.fn(),
     })
 

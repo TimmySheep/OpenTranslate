@@ -4,12 +4,16 @@ import { z } from "zod"
 const getItem = vi.fn()
 const setItem = vi.fn()
 const setMeta = vi.fn()
+const removeItem = vi.fn()
+const removeItems = vi.fn()
 const watch = vi.fn()
 
 const storageMock = {
   getItem,
   setItem,
   setMeta,
+  removeItem,
+  removeItems,
   watch,
 }
 
@@ -95,7 +99,10 @@ describe("createWxtStorageAdapter / default storageAdapter", () => {
     const injected = {
       get: vi.fn().mockResolvedValue("injected"),
       set: vi.fn(),
+      getMeta: vi.fn(),
       setMeta: vi.fn(),
+      remove: vi.fn(),
+      removeMany: vi.fn(),
       watch: vi.fn(),
     }
     setStorageAdapter(injected)
