@@ -1,0 +1,22 @@
+# OpenTranslate App settings storage fix and TestFlight build 6
+
+- 日期：2026-11-14
+- 问题：App 内设置写入报 `You must add the 'storage' permission to your manifest to use 'wxt/storage'`，值被回滚。
+- 根因验证：新回归测试在 WXT storage 模拟权限异常、注入 adapter 的 App 场景下，源码修改前失败；调用栈为 `setLocalConfig` → `storage.setItem`（`extension/src/utils/config/storage.ts:31`）。
+- 红测原文：`Error: You must add the 'storage' permission to your manifest to use 'wxt/storage'`；`at setLocalConfig src/utils/config/storage.ts:31:38`；1 test failed。
+- 改动（源码/测试提交 `d569ef0`）：
+  - `utils/atoms/storage-adapter.ts`：扩展默认 adapter facade 支持 metadata 读取、删除和 session namespace；WXT local key 路由及 schema 校验保持原行为；bridge 实现对应入口。
+  - `utils/config/storage.ts`：配置读、写和 metadata 操作经由 adapter facade。
+  - `utils/config/init.ts`：初始化读取、写入和 metadata 操作经由 adapter facade。
+  - `utils/providers/model.ts`：provider 配置读取经由 adapter facade，保留原始读取行为。
+  - `utils/session-cache/session-cache-group.ts`：缓存读写、metadata 和删除经由 adapter facade。
+  - 新增 `utils/config/__tests__/storage-adapter.test.ts` 验证注入 adapter 保存配置且从不调用 WXT storage；更新 adapter 测试替身以覆盖扩充后的 facade。
+- 扩展侧行为：默认仍使用 WXT storage；`local:` key、schema 解析、metadata、watch 均按原逻辑运行。session cache 使用原 `session:` namespace。没有改 config schema、翻译核心、pbxproj 或 entitlements。
+- Vitest 冻结基线：1021 项，1017 通过，4 项失败。
+- Vitest 修复后：1022 项，1018 通过，4 项失败。允许失败均为既有联网用例：Google 简体/繁体测试各超时 5000ms；Microsoft 简体/繁体 token refresh 各返回 404。冻结基线复跑得到同一组失败。
+- 双端 Release 构建：macOS（`CODE_SIGNING_ALLOWED=NO MACOSX_DEPLOYMENT_TARGET=12.0`）`BUILD SUCCEEDED`；iOS（`CODE_SIGNING_ALLOWED=NO`）`BUILD SUCCEEDED`。
+- Safari 资源：版本变更前及版本提交后均运行 `scripts/build-safari.sh` 和 `scripts/sync-resources.sh`。
+- build version 提交：`87a71e7`；pbxproj 的 8 项 `CURRENT_PROJECT_VERSION` 均为 6，无残留 5，`MARKETING_VERSION=1.0.1`。
+- 归档/导出：通过 `LimitLoadToSessionType=Aqua` 的 `gui/501` launchd job 完成；archive 与 export 成功。导出方式 `app-store-connect`，Team ID `JY5U4D6JD3`。IPA 回读为 `1.0.1 (6)`。
+- App Store Connect：build 6 ID `1bf580a7-a2ae-49b6-9bbc-61a41f51345f`，处理状态 `VALID`；已 PATCH `usesNonExemptEncryption=false` 并回读确认；已关联内部测试组“内部测试” (`8345138c-7bcb-4e6a-bc9c-20e4efd30e57`) 并回读确认。
+- 未 git push。ASC 凭据未写入仓库或日志。

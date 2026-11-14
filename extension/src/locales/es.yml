@@ -1,6 +1,6 @@
 name: OpenTranslate
 extName: OpenTranslate
-extDescription: OpenTranslate es una extensión de navegador de código abierto diseñada para ayudarte a aprender idiomas en profundidad desde cualquier sitio web.
+extDescription: Extensión de navegador de código abierto para leer y aprender idiomas en cualquier sitio web.
 uninstallSurveyUrl: https://tally.so/r/nPK6Ob
 dataTypes:
   string: Texto

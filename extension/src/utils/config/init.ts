@@ -1,11 +1,11 @@
 import type { Config } from "@/types/config/config"
 import type { ConfigMeta } from "@/types/config/meta"
-import { storage } from "#imports"
 import { configSchema } from "@/types/config/config"
 import { isAPIProviderConfig } from "@/types/config/provider"
 import { CONFIG_SCHEMA_VERSION, CONFIG_STORAGE_KEY, DEFAULT_CONFIG } from "../constants/config"
 import { logger } from "../logger"
 import { runMigration } from "./migration"
+import { storageAdapter } from "../atoms/storage-adapter"
 
 /**
  * Initialize the config, this function should only be called once in the background script
@@ -13,8 +13,8 @@ import { runMigration } from "./migration"
  */
 export async function initializeConfig() {
   const [storedConfig, configMeta] = await Promise.all([
-    storage.getItem<Config>(`local:${CONFIG_STORAGE_KEY}`),
-    storage.getMeta<ConfigMeta>(`local:${CONFIG_STORAGE_KEY}`),
+    storageAdapter.get<Config | null>(CONFIG_STORAGE_KEY, null, configSchema.nullable()),
+    storageAdapter.getMeta<ConfigMeta>(CONFIG_STORAGE_KEY),
   ])
 
   let config: Config
@@ -66,11 +66,11 @@ export async function initializeConfig() {
       || configMeta?.lastModifiedAt === undefined
 
   if (didConfigChange) {
-    await storage.setItem<Config>(`local:${CONFIG_STORAGE_KEY}`, config)
+    await storageAdapter.set(CONFIG_STORAGE_KEY, config, configSchema)
   }
 
   if (didConfigChange || didMetaNeedUpdate) {
-    await storage.setMeta<ConfigMeta>(`local:${CONFIG_STORAGE_KEY}`, {
+    await storageAdapter.setMeta(CONFIG_STORAGE_KEY, {
       schemaVersion: currentVersion,
       lastModifiedAt: configMeta?.lastModifiedAt ?? Date.now(),
     })

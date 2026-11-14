@@ -6,6 +6,7 @@ import { configSchema } from "@/types/config/config"
 import { CONFIG_STORAGE_KEY, DEFAULT_CONFIG } from "../constants/config"
 import { logger } from "../logger"
 import { storageAdapter } from "./storage-adapter"
+import { pushLocalConfigToShared } from "@/utils/safari-shared-settings"
 
 export const configAtom = atom<Config>(DEFAULT_CONFIG)
 
@@ -62,8 +63,13 @@ export const writeConfigAtom = atom(
 
       try {
         // Storage write always executes (not affected by version check)
+        const lastModifiedAt = Date.now()
         await storageAdapter.set(CONFIG_STORAGE_KEY, nextToPersist, configSchema)
-        await storageAdapter.setMeta(CONFIG_STORAGE_KEY, { lastModifiedAt: Date.now() })
+        await storageAdapter.setMeta(CONFIG_STORAGE_KEY, { lastModifiedAt })
+        // Best-effort App Group mirror on Safari; failures must not roll back local write.
+        void pushLocalConfigToShared(nextToPersist, lastModifiedAt).catch((error) => {
+          logger.warn("Failed to push config to App Group", error)
+        })
 
         // ───────────────────────────────────────────────────────────────────
         // STEP 3: Reconcile atom with persisted value (stale-write check)
