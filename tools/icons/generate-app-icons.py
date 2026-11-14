@@ -24,11 +24,15 @@ APP_ICON_DIR = APP_DIR / "Assets.xcassets" / "AppIcon.appiconset"
 LARGE_ICON_PATH = APP_DIR / "Assets.xcassets" / "LargeIcon.imageset" / "128.png"
 RESOURCE_ICON_PATH = APP_DIR / "Resources" / "Icon.png"
 BLACK_THRESHOLD = 16
+SILHOUETTE_THRESHOLD = 48
+DIFFUSION_PASSES = 128
 MAC_ART_SIZE = 824
 MAC_CANVAS_SIZE = 1024
 
 
-def connected_silhouette(rgb: Image.Image) -> Image.Image:
+def connected_silhouette(
+    rgb: Image.Image, threshold: int = BLACK_THRESHOLD
+) -> Image.Image:
     """Keep the non-black component connected to the icon's center.
 
     JPEG compression can create isolated dark-background speckles. Restricting
@@ -40,7 +44,7 @@ def connected_silhouette(rgb: Image.Image) -> Image.Image:
         ImageChops.lighter(rgb.getchannel("R"), rgb.getchannel("G")),
         rgb.getchannel("B"),
     ).tobytes()
-    candidates = bytearray(value > BLACK_THRESHOLD for value in brightest)
+    candidates = bytearray(value > threshold for value in brightest)
     seed = (height // 2) * width + width // 2
     if not candidates[seed]:
         raise ValueError("The source image center is not inside the icon")
@@ -95,76 +99,72 @@ def find_icon_crop(source: Image.Image) -> Image.Image:
 def diffuse_black_corners(crop: Image.Image) -> tuple[Image.Image, Image.Image]:
     """Extend adjacent icon colors through the rounded-square's black corners.
 
-    Pixels above BLACK_THRESHOLD seed a simultaneous 8-neighbor mean
-    diffusion. Each outside pixel is filled once from already-filled neighbors,
-    preserving the original icon pixels while smoothly extrapolating its edge.
+    Pixels above SILHOUETTE_THRESHOLD define the visible silhouette. The
+    outside pixels are initialized from their nearest horizontal silhouette
+    edge, then repeatedly updated by a 3x3 neighborhood mean while the source
+    silhouette pixels remain fixed.
     """
     width, height = crop.size
     if width != height:
         raise ValueError(f"Expected square crop, got {crop.size}")
 
     pixels = bytearray(crop.tobytes())
-    silhouette = connected_silhouette(crop)
+    silhouette = connected_silhouette(crop, SILHOUETTE_THRESHOLD)
     silhouette_pixels = silhouette.tobytes()
     known = bytearray(value != 0 for value in silhouette_pixels)
-    silhouette = known.copy()
 
-    def adjacent_indices(index: int):
-        x = index % width
-        y = index // width
-        for dy in (-1, 0, 1):
-            ny = y + dy
-            if ny < 0 or ny >= height:
+    # Start each empty pixel from the closest horizontal edge pixel. This
+    # guarantees a non-black initial image; mean diffusion below removes the
+    # row-wise extension's directional bias.
+    for y in range(height):
+        row_start = y * width
+        seed_positions = [x for x in range(width) if known[row_start + x]]
+        if not seed_positions:
+            raise ValueError(f"Silhouette has no pixels on row {y}")
+
+        left_seed = [-1] * width
+        right_seed = [-1] * width
+        nearest = -1
+        for x in range(width):
+            if known[row_start + x]:
+                nearest = x
+            left_seed[x] = nearest
+        nearest = -1
+        for x in range(width - 1, -1, -1):
+            if known[row_start + x]:
+                nearest = x
+            right_seed[x] = nearest
+
+        for x in range(width):
+            index = row_start + x
+            if known[index]:
                 continue
-            for dx in (-1, 0, 1):
-                if dx == 0 and dy == 0:
-                    continue
-                nx = x + dx
-                if 0 <= nx < width:
-                    yield ny * width + nx
-
-    frontier: set[int] = set()
-    for index, is_known in enumerate(known):
-        if is_known:
-            frontier.update(
-                neighbor
-                for neighbor in adjacent_indices(index)
-                if not known[neighbor]
-            )
-
-    filled = sum(known)
-    total = width * height
-    while frontier:
-        current_frontier = frontier
-        next_frontier: set[int] = set()
-        for index in frontier:
-            sums = [0, 0, 0]
-            neighbor_count = 0
-            for neighbor in adjacent_indices(index):
-                if known[neighbor]:
-                    offset = neighbor * 3
-                    sums[0] += pixels[offset]
-                    sums[1] += pixels[offset + 1]
-                    sums[2] += pixels[offset + 2]
-                    neighbor_count += 1
-                elif neighbor not in current_frontier:
-                    next_frontier.add(neighbor)
-
-            if neighbor_count:
-                offset = index * 3
-                pixels[offset] = (sums[0] + neighbor_count // 2) // neighbor_count
-                pixels[offset + 1] = (sums[1] + neighbor_count // 2) // neighbor_count
-                pixels[offset + 2] = (sums[2] + neighbor_count // 2) // neighbor_count
-
-        for index in frontier:
-            known[index] = 1
-        filled += len(frontier)
-        frontier = next_frontier
-
-    if filled != total:
-        raise ValueError(f"Could not diffuse all crop pixels ({filled}/{total})")
+            left = left_seed[x]
+            right = right_seed[x]
+            if left < 0:
+                source_x = right
+            elif right < 0:
+                source_x = left
+            elif x - left <= right - x:
+                source_x = left
+            else:
+                source_x = right
+            source_offset = (row_start + source_x) * 3
+            target_offset = index * 3
+            pixels[target_offset : target_offset + 3] = pixels[
+                source_offset : source_offset + 3
+            ]
 
     extended = Image.frombytes("RGB", crop.size, bytes(pixels))
+    fill_mask = Image.frombytes(
+        "L",
+        crop.size,
+        bytes(0 if is_known else 255 for is_known in known),
+    )
+    for _ in range(DIFFUSION_PASSES):
+        blurred = extended.filter(ImageFilter.BoxBlur(radius=1))
+        extended.paste(blurred, (0, 0), fill_mask)
+
     alpha = Image.frombytes(
         "L", crop.size, silhouette_pixels
     ).filter(ImageFilter.GaussianBlur(radius=0.65))
