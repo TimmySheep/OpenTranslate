@@ -1,6 +1,6 @@
 import type { VariantProps } from "class-variance-authority"
 import { cva } from "class-variance-authority"
-import { useEffect, useReducer, useRef } from "react"
+import { useEffect, useReducer, useRef, useState } from "react"
 import { browser } from "#imports"
 import { resolveContentScriptAssetBlob, shouldProxyAssetUrl } from "@/utils/content-script/background-asset-url"
 import { cn } from "@/utils/styles/utils"
@@ -122,12 +122,14 @@ export default function ProviderIcon({ logo, name, size, className, textClassNam
     getInitialResolvedLogo,
   )
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [hasLoadError, setHasLoadError] = useState(false)
   const normalizedSize = size ?? "base"
   const imgAlt = name ?? ""
 
   useEffect(() => {
     let isCancelled = false
     let resolvedBitmap: ImageBitmap | null = null
+    setHasLoadError(false)
 
     if (!shouldProxyAssetUrl(normalizedLogo)) {
       setResolvedLogo({ kind: "src", src: normalizedLogo })
@@ -146,6 +148,7 @@ export default function ProviderIcon({ logo, name, size, className, textClassNam
 
     void resolveContentScriptAssetBlob(normalizedLogo).then(async (assetBlob) => {
       if (!assetBlob || isCancelled) {
+        if (!isCancelled) setHasLoadError(true)
         return
       }
 
@@ -160,6 +163,7 @@ export default function ProviderIcon({ logo, name, size, className, textClassNam
     }).catch(() => {
       if (!isCancelled) {
         setResolvedLogo(null)
+        setHasLoadError(true)
       }
     })
 
@@ -176,11 +180,13 @@ export default function ProviderIcon({ logo, name, size, className, textClassNam
 
     const canvas = canvasRef.current
     if (!canvas) {
+      setHasLoadError(true)
       return
     }
 
     const context = canvas.getContext("2d")
     if (!context) {
+      setHasLoadError(true)
       return
     }
 
@@ -203,7 +209,12 @@ export default function ProviderIcon({ logo, name, size, className, textClassNam
     const drawX = (displaySize - drawWidth) / 2
     const drawY = (displaySize - drawHeight) / 2
 
-    context.drawImage(resolvedLogo.bitmap, drawX, drawY, drawWidth, drawHeight)
+    try {
+      context.drawImage(resolvedLogo.bitmap, drawX, drawY, drawWidth, drawHeight)
+    }
+    catch {
+      setHasLoadError(true)
+    }
   }, [normalizedSize, resolvedLogo])
 
   return (
@@ -214,7 +225,10 @@ export default function ProviderIcon({ logo, name, size, className, textClassNam
             src={resolvedLogo.src}
             alt={imgAlt}
             className={iconVariants({ size })}
-            onError={() => setResolvedLogo(null)}
+            onError={() => {
+              setResolvedLogo(null)
+              setHasLoadError(true)
+            }}
           />
         )}
         {resolvedLogo?.kind === "bitmap" && (
@@ -226,6 +240,7 @@ export default function ProviderIcon({ logo, name, size, className, textClassNam
             aria-hidden={imgAlt ? undefined : true}
           />
         )}
+        {hasLoadError && <span className={textVariants({ size })}>{name?.[0]?.toUpperCase() || "?"}</span>}
       </div>
       {name && <span className={cn(textVariants({ size }), textClassName)}>{name}</span>}
     </div>

@@ -1,9 +1,11 @@
 import { backgroundFetch } from "./background-fetch-client"
 
-const EXTENSION_PROTOCOLS = new Set([
+const OWN_PAGE_PROTOCOLS = new Set([
   "chrome-extension:",
   "moz-extension:",
   "safari-web-extension:",
+  // macOS/iOS app settings pages are loaded with WKWebView.loadFileURL.
+  "file:",
 ])
 
 const resolvedAssetBlobCache = new Map<string, Blob>()
@@ -26,15 +28,19 @@ export function shouldProxyAssetUrl(resourceUrl: string, pageUrl = getCurrentPag
 
   try {
     const protocol = new URL(pageUrl).protocol
-    return !EXTENSION_PROTOCOLS.has(protocol)
+    return isThirdPartyPage(protocol)
   }
   catch {
     return true
   }
 }
 
-export async function resolveContentScriptAssetBlob(resourceUrl: string) {
-  if (!shouldProxyAssetUrl(resourceUrl)) {
+function isThirdPartyPage(protocol: string) {
+  return !OWN_PAGE_PROTOCOLS.has(protocol)
+}
+
+export async function resolveContentScriptAssetBlob(resourceUrl: string, pageUrl = getCurrentPageUrl()) {
+  if (!shouldProxyAssetUrl(resourceUrl, pageUrl)) {
     return null
   }
 
