@@ -75,8 +75,6 @@ private enum ModelDirectory {
     }
 }
 
-private enum TranslateMode: String, CaseIterable { case text = "文字", image = "图片", document = "文档" }
-
 private struct NativeProvider: Identifiable, Hashable {
     let id: String
     let name: String
@@ -106,13 +104,13 @@ private struct NativeProvider: Identifiable, Hashable {
     @Published var providerName = ""
     @Published var error: String?
     @Published var isLoading = false
-    @Published var mode: TranslateMode = .text
     @Published var hasKey = false
     @Published var targetCode = "cmn"
     @Published var sourceCode = "auto"
     @Published var providerId = "deepseek"
     @Published var config: [String: Any] = [:]
     private let speech = AVSpeechSynthesizer()
+    let historyStore = TranslationHistoryStore()
     static let languages: [(String, String, String)] = [("cmn","简体中文","Chinese Simplified"),("cht","繁體中文","Chinese Traditional"),("eng","英语","English"),("jpn","日语","Japanese"),("kor","韩语","Korean"),("fra","法语","French"),("deu","德语","German"),("spa","西班牙语","Spanish"),("rus","俄语","Russian"),("ita","意大利语","Italian"),("por","葡萄牙语","Portuguese"),("ara","阿拉伯语","Arabic"),("hin","印地语","Hindi"),("ben","孟加拉语","Bengali"),("urd","乌尔都语","Urdu"),("ind","印度尼西亚语","Indonesian"),("msa","马来语","Malay"),("tha","泰语","Thai"),("vie","越南语","Vietnamese"),("tur","土耳其语","Turkish"),("nld","荷兰语","Dutch"),("swe","瑞典语","Swedish"),("nor","挪威语","Norwegian"),("dan","丹麦语","Danish"),("fin","芬兰语","Finnish"),("pol","波兰语","Polish"),("ukr","乌克兰语","Ukrainian"),("ces","捷克语","Czech"),("ell","希腊语","Greek"),("heb","希伯来语","Hebrew"),("fas","波斯语","Persian"),("tam","泰米尔语","Tamil"),("tel","泰卢固语","Telugu"),("mar","马拉地语","Marathi"),("guj","古吉拉特语","Gujarati"),("pan","旁遮普语","Punjabi"),("swa","斯瓦希里语","Swahili"),("ron","罗马尼亚语","Romanian"),("hun","匈牙利语","Hungarian"),("bul","保加利亚语","Bulgarian"),("hrv","克罗地亚语","Croatian"),("srp","塞尔维亚语","Serbian"),("slk","斯洛伐克语","Slovak"),("slv","斯洛文尼亚语","Slovenian"),("cat","加泰罗尼亚语","Catalan"),("eus","巴斯克语","Basque"),("glg","加利西亚语","Galician"),("isl","冰岛语","Icelandic"),("gle","爱尔兰语","Irish"),("cym","威尔士语","Welsh"),("est","爱沙尼亚语","Estonian"),("lav","拉脱维亚语","Latvian"),("lit","立陶宛语","Lithuanian"),("khm","高棉语","Khmer"),("lao","老挝语","Lao"),("mya","缅甸语","Burmese"),("nep","尼泊尔语","Nepali"),("sin","僧伽罗语","Sinhala"),("amh","阿姆哈拉语","Amharic"),("yor","约鲁巴语","Yoruba"),("zul","祖鲁语","Zulu"),("afr","南非荷兰语","Afrikaans"),("kaz","哈萨克语","Kazakh"),("uzb","乌兹别克语","Uzbek"),("mon","蒙古语","Mongolian"),("yid","意第绪语","Yiddish")]
 
     init() { reload() }
@@ -212,6 +210,9 @@ private struct NativeProvider: Identifiable, Hashable {
                 result = parsed
             } else { result = TranslationPayload(translation: cleaned, partOfSpeech: nil, ipa: nil, alternatives: nil, examples: nil, definitions: nil) }
             providerName = (item["name"] as? String) ?? provider.name
+            if let translation = result?.translation {
+                historyStore.record(input: text, translation: translation, sourceCode: sourceCode, targetCode: targetCode, providerName: providerName)
+            }
         } catch {
             self.error = (error as? URLError)?.code == .timedOut ? "请求超时（45 秒），请稍后重试。" : error.localizedDescription
         }
@@ -276,11 +277,14 @@ struct TranslateScreen: View {
     @State private var showingTargetLanguages = false
     @State private var showingSwapNotice = false
     @State private var showingCameraNotice = false
-    @State private var showingPDFImporter = false
+    @State private var showingFileImporter = false
     #if os(iOS)
     @State private var pasteAvailable = false
     @State private var showingPhotoPicker = false
     #endif
+    @State private var historyHeight: CGFloat = 0
+    @State private var historyDragStart: CGFloat = 0
+    @State private var historyIsDragging = false
     @State private var sourceDrag: CGFloat = 0
     @State private var targetDrag: CGFloat = 0
     @State private var sourceWidth: CGFloat = 0
@@ -290,38 +294,81 @@ struct TranslateScreen: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let wide = geometry.size.width >= 700
+            let cardHeight = min(420, max(260, geometry.size.height * 0.55))
+            let maximumHistoryHeight = min(320, geometry.size.height * 0.42)
             ZStack {
-                #if os(macOS)
-                Color(hex: systemScheme == .dark ? "131314" : "FFFFFF").ignoresSafeArea()
-                #else
-                OTColor.background.ignoresSafeArea()
-                #endif
-                VStack(spacing: 0) {
-                    header.padding(.horizontal, 24).padding(.top, 8)
-                    if !model.hasKey { Button { showingSettings = true } label: { Label("添加 AI 提供商后即可翻译", systemImage: "key.fill").frame(maxWidth: .infinity, alignment: .leading).padding(12) }.buttonStyle(.plain).padding(.horizontal, 24).padding(.top, 12) }
-                    if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading).padding(12).padding(.horizontal, 24) }
-                    #if os(macOS)
-                    modeTabs.padding(.horizontal, 24).padding(.top, 16)
-                    languageBar.padding(.horizontal, 24).padding(.top, 12)
-                    HStack(alignment: .top, spacing: 16) {
-                        macInputCard.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        macOutputCard.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }.padding(.horizontal, 24).padding(.top, 12).frame(maxWidth: .infinity, maxHeight: .infinity)
-                    #else
-                    if wide {
-                        HStack(alignment: .top, spacing: 24) {
-                            inputArea.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            Group { if model.result != nil { resultCard } else { emptyResult } }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }.padding(.horizontal, 24).padding(.top, 16).frame(maxHeight: .infinity)
-                    } else if model.result != nil { resultCard.padding(.horizontal, 24).padding(.top, 16).frame(maxHeight: .infinity) }
-                    else { inputArea.padding(.horizontal, 24).padding(.top, 16).frame(maxHeight: .infinity, alignment: .topLeading) }
-                    if model.result == nil {
-                        languageBar.padding(.horizontal, 24)
-                        actionBar.padding(.horizontal, 24).padding(.top, 28).padding(.bottom, 20)
+                pageBackground.ignoresSafeArea()
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        header
+                            .padding(.horizontal, 24)
+                            .padding(.top, 8)
+                            .frame(maxWidth: 608)
+                        if !model.hasKey {
+                            Button { showingSettings = true } label: {
+                                Label("添加 AI 提供商后即可翻译", systemImage: "key.fill")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(12)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 12)
+                            .frame(maxWidth: 608)
+                        }
+                        if let error = model.error {
+                            Text(error)
+                                .font(.callout)
+                                .foregroundStyle(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .padding(.horizontal, 24)
+                                .frame(maxWidth: 608)
+                        }
+
+                        if model.result != nil {
+                            resultCard
+                                .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
+                                .frame(height: cardHeight, alignment: .topLeading)
+                                .padding(.horizontal, 24)
+                                .padding(.top, 12)
+                        } else {
+                            inputCard(height: cardHeight, maximumHistoryHeight: maximumHistoryHeight)
+                                .padding(.top, 12)
+                        }
+
+                        if historyHeight > 0 {
+                            historyPanel
+                                .frame(maxWidth: 560)
+                                .frame(height: historyHeight)
+                                .padding(.top, historyHeight)
+                                .transition(.opacity)
+                        }
+
+                        languageBar
+                            .frame(maxWidth: 560)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 12)
+                        actionBar
+                            .frame(maxWidth: 560)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 20)
+                            .padding(.bottom, 20)
                     }
-                    #endif
+                    .frame(maxWidth: .infinity)
                 }
+#if os(macOS)
+            Button("切换历史记录") { toggleHistory(maximum: maximumHistoryHeight) }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
+            Button("粘贴到卡片") { pasteIntoCard() }
+                .keyboardShortcut("v", modifiers: .command)
+                .disabled(editing)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
+#endif
             }
         }
         .sheet(isPresented: $showingSettings) { NativeSettingsSheet(model: model) }
@@ -336,60 +383,37 @@ struct TranslateScreen: View {
             else { Text("照片选择需要 iOS 16 或更新版本。") }
         }
         #endif
-        .fileImporter(isPresented: $showingPDFImporter, allowedContentTypes: model.mode == .image ? [.image] : [.pdf], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.image, .pdf], allowsMultipleSelection: false) { result in
             if case .success(let urls) = result, let url = urls.first {
-                if model.mode == .image {
+                let isPDF = UTType(filenameExtension: url.pathExtension)?.conforms(to: .pdf) ?? (url.pathExtension.lowercased() == "pdf")
+                if isPDF {
+                    model.translatePDF(url: url)
+                } else {
                     let accessGranted = url.startAccessingSecurityScopedResource()
                     defer { if accessGranted { url.stopAccessingSecurityScopedResource() } }
                     if let data = try? Data(contentsOf: url) { model.translateImage(data) }
                     else { model.error = "无法读取所选图片。" }
-                } else { model.translatePDF(url: url) }
+                }
             }
             else if case .failure(let error) = result { model.error = error.localizedDescription }
         }
         .onChange(of: editing) { active in if active { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { editorFocused = true } } }
         .onAppear { model.reload(); refreshPasteboard() }
         .preferredColorScheme(themePreference == "light" ? .light : (themePreference == "dark" ? .dark : nil))
+#if os(macOS)
+        .onExitCommand { if editing { cancelEditing() } }
+#endif
     }
 
-    #if os(macOS)
-    private var modeTabs: some View {
-        HStack(spacing: 8) {
-            ForEach(TranslateMode.allCases, id: \.self) { mode in
-                Button { model.mode = mode } label: {
-                    Text(mode.rawValue).font(.system(size: 13, weight: .medium)).foregroundStyle(model.mode == mode ? Color(hex: systemScheme == .dark ? "AEC6F5" : "0B57D0") : Color(hex: systemScheme == .dark ? "9AA0A6" : "5F6368"))
-                        .padding(.horizontal, 16).frame(height: 36).background(model.mode == mode ? Color(hex: systemScheme == .dark ? "1D4973" : "D3E3FD") : .clear, in: Capsule())
-                        .overlay(Capsule().stroke(model.mode == mode ? .clear : Color(hex: "747775"), lineWidth: 1))
-                }.buttonStyle(.plain)
-            }
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-    private var macInputCard: some View {
-        VStack(alignment: .leading) {
-            if model.mode == .text {
-                if editing {
-                    HStack { Button("取消") { draft = model.input; editing = false }; Spacer(); Button("完成") { model.input = draft; editing = false; if model.hasKey { Task { await model.translate() } } } }
-                    editorView
-                } else {
-                    Text(model.input.isEmpty ? "输入文字" : model.input).font(.system(size: model.input.isEmpty ? 20 : 18)).foregroundStyle(Color(hex: model.input.isEmpty ? (systemScheme == .dark ? "9AA0A6" : "5F6368") : (systemScheme == .dark ? "E8EAED" : "202124"))).onTapGesture { draft = model.input; editing = true }
-                }
-            } else {
-                Text(model.mode == .image ? "选择图片后翻译" : "选择 PDF 文档翻译").font(.system(size: 20)).foregroundStyle(Color(hex: systemScheme == .dark ? "9AA0A6" : "5F6368"))
-            }
-            Spacer(minLength: 0)
-            if model.mode != .text {
-                Button(model.mode == .image ? "选择图片" : "选择 PDF") { showingPDFImporter = true }.buttonStyle(.bordered)
-            } else if !model.input.isEmpty { Button("翻译") { Task { await model.translate() } }.buttonStyle(.borderedProminent) }
-        }.padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(hex: systemScheme == .dark ? "131314" : "FFFFFF"), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: systemScheme == .dark ? "3C4043" : "E0E0E0"), lineWidth: 1))
-    }
-    private var macOutputCard: some View {
-        Group { if let result = model.result?.translation { Text(result).font(.system(size: 20)).foregroundStyle(Color(hex: systemScheme == .dark ? "E8EAED" : "202124")).textSelection(.enabled) } else { Text("翻译").font(.system(size: 20)).foregroundStyle(Color(hex: systemScheme == .dark ? "9AA0A6" : "5F6368")) } }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(16)
-            .background(Color(hex: systemScheme == .dark ? "1F1F21" : "F5F7F9"), in: RoundedRectangle(cornerRadius: 8))
-    }
-    #endif
+    private var isDarkAppearance: Bool { systemScheme == .dark }
+    private var pageBackground: Color { Color(hex: isDarkAppearance ? "131314" : "FFFFFF") }
+    private var cardBackground: Color { Color(hex: isDarkAppearance ? "1F1F21" : "F1F3F4") }
+    private var languageBackground: Color { Color(hex: isDarkAppearance ? "2B2C2E" : "F1F3F4") }
+    private var historyBackground: Color { Color(hex: isDarkAppearance ? "1B1C1E" : "F8F9FA") }
+    private var primaryTextColor: Color { Color(hex: isDarkAppearance ? "E8EAED" : "202124") }
+    private var secondaryTextColor: Color { Color(hex: isDarkAppearance ? "9AA0A6" : "5F6368") }
+    private var micFillColor: Color { Color(hex: isDarkAppearance ? "A8C7FA" : "1A73E8") }
+    private var micGlyphColor: Color { isDarkAppearance ? Color(hex: "131314") : .white }
 
     private var header: some View {
         HStack {
@@ -397,29 +421,163 @@ struct TranslateScreen: View {
             Spacer()
             Text("OpenTranslate").font(.system(size: 17, weight: .semibold))
             Spacer()
-            Button { showingSettings = true } label: { Image(systemName: "gearshape").font(.system(size: 18)).foregroundStyle(OTColor.secondary).frame(width: 42, height: 42).background(OTColor.panel, in: Circle()) }.buttonStyle(.plain).accessibilityLabel("设置")
-        }.frame(height: 42)
+            Button { showingSettings = true } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18))
+                    .foregroundStyle(secondaryTextColor)
+                    .frame(width: 42, height: 42)
+                    .background(languageBackground, in: Circle())
+                    .overlay(Circle().stroke(isDarkAppearance ? .clear : Color(hex: "DADCE0"), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("设置")
+        }
+        .frame(height: 42)
     }
-    // Deliberately transparent: the editor occupies the page background, never a card.
+
+    private func inputCard(height: CGFloat, maximumHistoryHeight: CGFloat) -> some View {
+        ZStack {
+            inputArea
+                .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 48)
+
+            RoundedRectangle(cornerRadius: 2)
+                .fill(isDarkAppearance ? Color.white.opacity(0.24) : Color.black.opacity(0.16))
+                .frame(width: 44, height: 4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 10)
+                .allowsHitTesting(false)
+
+        }
+        .frame(maxWidth: 608)
+        .frame(height: height)
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: 28))
+        .clipShape(RoundedRectangle(cornerRadius: 28))
+        .shadow(color: isDarkAppearance ? .clear : Color.black.opacity(0.08), radius: 24, x: 0, y: 8)
+        .overlay(alignment: .bottom) {
+            if !editing {
+                Color.clear
+                    .frame(width: 124, height: 48)
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(historyGripGesture(maximum: maximumHistoryHeight))
+                    .offset(y: 14)
+                    .accessibilityElement()
+                    .accessibilityLabel(historyHeight > 0 ? "收起历史记录" : "展开历史记录")
+                    .accessibilityHint("轻点切换，或上下拖动历史记录面板")
+            }
+        }
+        .offset(y: historyHeight)
+    }
+
     private var inputArea: some View {
         VStack(alignment: .leading, spacing: 8) {
+            #if os(macOS)
             if editing {
-                HStack { Spacer(); Text("按 Enter 完成").font(.caption).foregroundStyle(.secondary) }
+                HStack {
+                    Button("取消", action: cancelEditing)
+                    Spacer()
+                    Button("完成", action: commitEditing)
+                }
+                .font(.system(size: 13))
+            }
+            #endif
+
+            if editing {
                 editorView
-                HStack { Spacer(); Text("\(draft.count) 字").font(.caption).foregroundStyle(.secondary) }
+                HStack { Spacer(); Text("\(draft.count) 字").font(.caption).foregroundStyle(secondaryTextColor) }
             } else {
-                Text(model.input.isEmpty ? "输入文字" : model.input).font(.system(size: model.input.isEmpty ? 34 : 22, weight: .regular)).foregroundStyle(model.input.isEmpty ? OTColor.secondary : OTColor.primary).frame(maxWidth: .infinity, minHeight: 50, alignment: .topLeading)
-                    .contentShape(Rectangle()).onTapGesture { draft = model.input; withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { editing = true } }
+                Text(model.input.isEmpty ? "输入文字" : model.input)
+                    .font(.system(size: model.input.isEmpty ? 34 : 22, weight: .regular))
+                    .foregroundStyle(model.input.isEmpty ? secondaryTextColor : primaryTextColor)
+                    .frame(maxWidth: .infinity, minHeight: 50, alignment: .topLeading)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: beginEditing)
                 #if os(iOS)
                 if pasteAvailable {
-                    Button { pasteText() } label: { Label("粘贴", systemImage: "doc.on.clipboard").font(.system(size: 14)).foregroundStyle(.white).padding(.horizontal, 14).frame(height: 30).background(OTColor.blue, in: Capsule()) }
-                        .buttonStyle(PressScaleStyle()).padding(.top, 8).transition(.scale(scale: 0.9).combined(with: .opacity))
+                    Button { pasteText() } label: {
+                        Label("粘贴", systemImage: "doc.on.clipboard")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .frame(height: 30)
+                            .background(OTColor.blue, in: Capsule())
+                    }
+                    .buttonStyle(PressScaleStyle())
+                    .padding(.top, 8)
+                    .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
                 #endif
-                if !model.input.isEmpty { Text("\(model.input.count) 字").font(.caption).foregroundStyle(.secondary) }
+                if !model.input.isEmpty {
+                    Text("\(model.input.count) 字").font(.caption).foregroundStyle(secondaryTextColor)
+                }
             }
-        }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).contentShape(Rectangle()).onTapGesture { if !editing { draft = model.input; withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { editing = true } } }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .onTapGesture { if !editing { beginEditing() } }
     }
+
+    private var historyPanel: some View {
+        TranslationHistoryPanel(store: model.historyStore, height: historyHeight, colorScheme: systemScheme) { entry in
+            model.input = entry.input
+            model.result = nil
+            draft = entry.input
+            editing = false
+            editorFocused = false
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { historyHeight = 0 }
+        }
+    }
+
+    private func historyGripGesture(maximum: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard !editing else { return }
+                if !historyIsDragging {
+                    historyIsDragging = true
+                    historyDragStart = historyHeight
+                }
+                historyHeight = min(maximum, max(0, historyDragStart + value.translation.height))
+            }
+            .onEnded { value in
+                guard !editing else { historyIsDragging = false; return }
+                let vertical = value.translation.height
+                let horizontal = value.translation.width
+
+                if abs(vertical) < 6 && abs(horizontal) < 6 {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                        historyHeight = historyHeight > 0 ? 0 : maximum
+                    }
+                } else if abs(vertical) >= abs(horizontal) {
+                    let projectedHeight = min(maximum, max(0, historyDragStart + value.predictedEndTranslation.height))
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                        historyHeight = projectedHeight > maximum * 0.35 ? maximum : 0
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { historyHeight = historyDragStart }
+                }
+                historyIsDragging = false
+            }
+    }
+
+    private func beginEditing() {
+        guard !editing else { return }
+        draft = model.input
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            historyHeight = 0
+            editing = true
+        }
+    }
+
+    private func toggleHistory(maximum: CGFloat) {
+        guard !editing else { return }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            historyHeight = historyHeight > 0 ? 0 : maximum
+        }
+    }
+
     @ViewBuilder private var editorView: some View {
         #if os(iOS)
         ReturnCommitTextEditor(text: $draft, onSubmit: commitEditing)
@@ -431,29 +589,36 @@ struct TranslateScreen: View {
         }
         #endif
     }
+    private func cancelEditing() {
+        guard editing else { return }
+        draft = model.input
+        editing = false
+        editorFocused = false
+    }
     private func commitEditing() {
         guard editing else { return }
         model.input = draft
         editing = false
+        editorFocused = false
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { historyHeight = 0 }
         if model.hasKey { Task { await model.translate() } }
     }
     private var languageBar: some View {
         HStack(spacing: 0) {
             languagePill(source: true).background(GeometryReader { proxy in Color.clear.onAppear { sourceWidth = proxy.size.width } }).offset(x: sourceDrag)
-            Button { swapLanguages() } label: { Image(systemName: "arrow.left.arrow.right").font(.system(size: 18)).foregroundStyle(OTColor.secondary).frame(width: 44, height: 44) }.buttonStyle(PressScaleStyle()).accessibilityLabel("交换语言")
+            Button { swapLanguages() } label: { Image(systemName: "arrow.left.arrow.right").font(.system(size: 18)).foregroundStyle(secondaryTextColor).frame(width: 44, height: 44) }.buttonStyle(PressScaleStyle()).accessibilityLabel("交换语言")
             languagePill(source: false).offset(x: targetDrag)
         }.font(.system(size: 13))
     }
     private func languagePill(source: Bool) -> some View {
         Button { if source { showingSourceLanguages = true } else { showingTargetLanguages = true } } label: {
-            #if os(macOS)
-            VStack(spacing: 0) {
-                Text(languageName(source ? model.sourceCode : model.targetCode)).foregroundStyle(Color(hex: systemScheme == .dark ? "E8EAED" : "202124")).frame(maxWidth: .infinity).frame(height: 42).padding(.horizontal, 8)
-                Rectangle().fill(Color(hex: systemScheme == .dark ? "AEC6F5" : "0B57D0")).frame(height: 2)
-            }.frame(maxWidth: .infinity).frame(height: 44)
-            #else
-            Text(languageName(source ? model.sourceCode : model.targetCode)).foregroundStyle(OTColor.primary).frame(maxWidth: .infinity).frame(height: 44).padding(.horizontal, 8).background(OTColor.panel, in: RoundedRectangle(cornerRadius: 12))
-            #endif
+            Text(languageName(source ? model.sourceCode : model.targetCode))
+                .foregroundStyle(primaryTextColor)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .padding(.horizontal, 8)
+                .background(languageBackground, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDarkAppearance ? .clear : Color(hex: "DADCE0"), lineWidth: 1))
         }.buttonStyle(.plain).accessibilityLabel(source ? "源语言" : "目标语言")
             .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { value in if source { sourceDrag = value.translation.width } else { targetDrag = value.translation.width } }.onEnded { value in
                 let threshold = sourceWidth * 0.5
@@ -469,19 +634,50 @@ struct TranslateScreen: View {
     private var actionBar: some View {
         HStack(spacing: 0) {
             #if os(iOS)
-            Menu {
-                Button { showingPhotoPicker = true } label: { Label("从照片选择", systemImage: "photo.on.rectangle") }
-                Button { showingPDFImporter = true } label: { Label("选择文档", systemImage: "doc") }
-            } label: {
-                Image(systemName: "plus").font(.system(size: 18, weight: .medium)).foregroundStyle(.white).frame(width: 44, height: 44).background(Color(hex: "1D4973"), in: Circle())
-            }.menuIndicator(.hidden).buttonStyle(.plain)
-                .frame(width: 44, height: 44).frame(maxWidth: .infinity, alignment: .center).accessibilityLabel("上传")
+            Button { showingFileImporter = true } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(primaryTextColor)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityLabel("上传文件")
             #else
-            Color.clear.frame(maxWidth: .infinity)
+            Color.clear.frame(width: 44, height: 44).frame(maxWidth: .infinity, alignment: .center)
             #endif
-            Button { showingVoiceNotice = true } label: { Image(systemName: "mic.fill").font(.system(size: 28)).foregroundStyle(OTColor.background).frame(width: 70, height: 70).background(OTColor.mic, in: Circle()) }.buttonStyle(PressScaleStyle()).frame(maxWidth: .infinity)
-            Button { showingCameraNotice = true } label: { Image(systemName: "camera.viewfinder").font(.system(size: 18)).foregroundStyle(.white).frame(width: 44, height: 44).background(OTColor.blue, in: Circle()) }.buttonStyle(PressScaleStyle()).frame(maxWidth: .infinity)
+            Button { showingVoiceNotice = true } label: {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(micGlyphColor)
+                    .frame(width: 86, height: 86)
+                    .background(micFillColor, in: Circle())
+            }
+            .buttonStyle(PressScaleStyle())
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel("语音输入")
+
+            imageMenu.frame(maxWidth: .infinity, alignment: .center)
         }
+    }
+    private var imageMenu: some View {
+        Menu {
+            #if os(iOS)
+            Button { showingCameraNotice = true } label: { Label("拍照", systemImage: "camera") }
+            Button { showingPhotoPicker = true } label: { Label("从照片选择", systemImage: "photo.on.rectangle") }
+            Button { showingFileImporter = true } label: { Label("选择文件", systemImage: "doc") }
+            #else
+            Button { showingFileImporter = true } label: { Label("从文件选择", systemImage: "doc") }
+            #endif
+        } label: {
+            Image(systemName: "camera.viewfinder")
+                .font(.system(size: 22))
+                .foregroundStyle(primaryTextColor)
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .accessibilityLabel("相机和文件翻译")
     }
     private func refreshPasteboard() {
         #if os(iOS)
@@ -493,12 +689,22 @@ struct TranslateScreen: View {
     private func pasteText() {
         #if os(iOS)
         guard let text = UIPasteboard.general.string, !text.isEmpty else { refreshPasteboard(); return }
+        model.result = nil
         model.input = text; draft = text
         if model.hasKey { Task { await model.translate() } } else { showingSettings = true }
         refreshPasteboard()
         #endif
     }
-    private var emptyResult: some View { Text("译文会显示在这里").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20) }
+    #if os(macOS)
+    private func pasteIntoCard() {
+        guard !editing, let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return }
+        model.result = nil
+        model.input = text
+        draft = text
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { historyHeight = 0 }
+        if model.hasKey { Task { await model.translate() } } else { showingSettings = true }
+    }
+    #endif
     private var resultCard: some View {
         ScrollView { VStack(alignment: .leading, spacing: 18) {
             HStack { Button { model.result = nil } label: { Label("返回", systemImage: "chevron.left") }; Spacer() }
@@ -513,6 +719,113 @@ struct TranslateScreen: View {
     }
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View { VStack(alignment: .leading, spacing: 8) { Text(title).font(.headline); content() } }
     private func languageName(_ code: String) -> String { code == "auto" ? "自动检测" : (TranslateModel.languages.first(where: { $0.0 == code })?.1 ?? code) }
+}
+
+private struct TranslationHistoryPanel: View {
+    @ObservedObject var store: TranslationHistoryStore
+    let height: CGFloat
+    let colorScheme: ColorScheme
+    let onSelect: (HistoryEntry) -> Void
+
+    @State private var showingClearConfirmation = false
+    @State private var showingDeleteConfirmation = false
+    @State private var entryToDelete: HistoryEntry?
+
+    private var isDark: Bool { colorScheme == .dark }
+    private var primaryText: Color { Color(hex: isDark ? "E8EAED" : "202124") }
+    private var secondaryText: Color { Color(hex: isDark ? "9AA0A6" : "5F6368") }
+    private var panelColor: Color { Color(hex: isDark ? "1B1C1E" : "F8F9FA") }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("历史记录")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(primaryText)
+                Spacer()
+                Button("清空") { showingClearConfirmation = true }
+                    .font(.system(size: 13))
+                    .foregroundStyle(secondaryText)
+                    .disabled(store.entries.isEmpty)
+            }
+            .padding(.bottom, 8)
+
+            if store.entries.isEmpty {
+                Text("还没有翻译记录")
+                    .font(.system(size: 13))
+                    .foregroundStyle(secondaryText)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(store.entries) { entry in
+                            historyRow(entry)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .background(panelColor, in: RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .confirmationDialog("清空全部历史？", isPresented: $showingClearConfirmation, titleVisibility: .visible) {
+            Button("清空", role: .destructive) { store.clear() }
+            Button("取消", role: .cancel) {}
+        }
+        .confirmationDialog("删除这条记录", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                if let entryToDelete { store.delete(id: entryToDelete.id) }
+                entryToDelete = nil
+            }
+            Button("取消", role: .cancel) { entryToDelete = nil }
+        }
+    }
+
+    private func historyRow(_ entry: HistoryEntry) -> some View {
+        Button { onSelect(entry) } label: {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.input)
+                        .font(.system(size: 15))
+                        .foregroundStyle(primaryText)
+                        .lineLimit(1)
+                    Text(entry.translation)
+                        .font(.system(size: 13))
+                        .foregroundStyle(secondaryText)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(relativeTime(entry.createdAt))
+                    .font(.system(size: 11))
+                    .foregroundStyle(secondaryText)
+                    .fixedSize()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .highPriorityGesture(
+            LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                entryToDelete = entry
+                showingDeleteConfirmation = true
+            }
+        )
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let elapsed = max(0, Date().timeIntervalSince(date))
+        if elapsed < 60 { return "刚刚" }
+        if elapsed < 3_600 { return "\(Int(elapsed / 60)) 分钟前" }
+        if elapsed < 86_400 { return "\(Int(elapsed / 3_600)) 小时前" }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "M月d日"
+        return formatter.string(from: date)
+    }
 }
 
 private extension Color {
