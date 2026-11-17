@@ -197,7 +197,9 @@ struct TranslateScreen: View {
     @State private var showingTargetLanguages = false
     @State private var showingSwapNotice = false
     @State private var showingCameraNotice = false
+    #if os(iOS)
     @State private var pasteAvailable = false
+    #endif
     @State private var sourceDrag: CGFloat = 0
     @State private var targetDrag: CGFloat = 0
     @State private var sourceWidth: CGFloat = 0
@@ -258,10 +260,12 @@ struct TranslateScreen: View {
             } else {
                 Text(model.input.isEmpty ? "输入文字" : model.input).font(.system(size: model.input.isEmpty ? 34 : 22, weight: .regular)).foregroundStyle(model.input.isEmpty ? OTColor.secondary : OTColor.primary).frame(maxWidth: .infinity, minHeight: 50, alignment: .topLeading)
                     .contentShape(Rectangle()).onTapGesture { draft = model.input; withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { editing = true } }
+                #if os(iOS)
                 if pasteAvailable {
                     Button { pasteText() } label: { Label("粘贴", systemImage: "doc.on.clipboard").font(.system(size: 14)).foregroundStyle(.white).padding(.horizontal, 14).frame(height: 30).background(OTColor.blue, in: Capsule()) }
                         .buttonStyle(PressScaleStyle()).padding(.top, 8).transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
+                #endif
                 if !model.input.isEmpty { Text("\(model.input.count) 字").font(.caption).foregroundStyle(.secondary) }
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).contentShape(Rectangle()).onTapGesture { if !editing { draft = model.input; withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { editing = true } } }
@@ -305,19 +309,17 @@ struct TranslateScreen: View {
     private func refreshPasteboard() {
         #if os(iOS)
         withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { pasteAvailable = UIPasteboard.general.hasStrings }
-        #elseif os(macOS)
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { pasteAvailable = !(NSPasteboard.general.string(forType: .string) ?? "").isEmpty }
+        #else
+        return
         #endif
     }
     private func pasteText() {
         #if os(iOS)
         guard let text = UIPasteboard.general.string, !text.isEmpty else { refreshPasteboard(); return }
-        #elseif os(macOS)
-        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { refreshPasteboard(); return }
-        #endif
         model.input = text; draft = text
         if model.hasKey { Task { await model.translate() } } else { showingSettings = true }
         refreshPasteboard()
+        #endif
     }
     private var emptyResult: some View { Text("译文会显示在这里").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20) }
     private var resultCard: some View {
