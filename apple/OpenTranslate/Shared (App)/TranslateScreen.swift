@@ -1530,22 +1530,19 @@ private struct LanguagePickerSheet: View {
                 Group {
                     if code == "auto" {
                         Image(systemName: "sparkles")
-                            .foregroundStyle(Color(hex: isDark ? "8AB4F8" : "1A73E8"))
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color(hex: "8AB4F8"))
                     } else if isPinned {
-                        ZStack {
-                            Circle().fill(Color(hex: isDark ? "8AB4F8" : "1A73E8"))
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(Color(hex: isDark ? "E8EAED" : "202124"))
                     } else {
-                        Image(systemName: "arrow.down.circle")
-                            .foregroundStyle(secondaryText)
+                        Image(systemName: "circle")
+                            .font(.system(size: 24))
+                            .foregroundStyle(Color(hex: "5F6368"))
                     }
                 }
-                .font(.system(size: 24))
                 .frame(width: 24, height: 24)
-                .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
