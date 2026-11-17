@@ -121,6 +121,65 @@ private enum AppStateSelfTest {
         check(emptyPinStore.pinned.isEmpty, "空置顶状态保持为空")
         pinDefaults.removePersistentDomain(forName: pinDefaultsName)
 
+        let generationDefaultsName = "OpenTranslateGenerationSettingsSelfTest-\(UUID().uuidString)"
+        let generationDefaults = UserDefaults(suiteName: generationDefaultsName)!
+        let generationStore = NativeGenerationStore(defaults: generationDefaults)
+        check(
+            generationStore.settings.systemPrompt.isEmpty
+                && generationStore.resolvedSystemPrompt(targetLanguage: "简体中文", input: "原文") == NativePromptDefaults.systemPrompt,
+            "默认空提示词回退到内置默认"
+        )
+
+        generationStore.setSystemPrompt(" \n\t ")
+        check(
+            generationStore.resolvedSystemPrompt(targetLanguage: "简体中文", input: "原文") == NativePromptDefaults.systemPrompt,
+            "仅空白与换行提示词回退到内置默认"
+        )
+
+        generationStore.setSystemPrompt("to={{targetLanguage}} input={{input}} title={{webTitle}} desc={{webDescription}} content={{webContent}} summary={{webSummary}}")
+        check(
+            generationStore.resolvedSystemPrompt(targetLanguage: "简体中文", input: "Hello")
+                == "to=简体中文 input=Hello title= desc= content= summary=",
+            "自定义提示词替换目标语言、原文并清空网页占位符"
+        )
+
+        generationStore.setSystemPrompt("自定义\n提示词  ")
+        check(
+            generationStore.resolvedSystemPrompt(targetLanguage: "简体中文", input: "原文") == "自定义\n提示词  ",
+            "不含占位符的自定义提示词原样返回"
+        )
+
+        generationStore.setTemperature(-1)
+        check(generationStore.settings.temperature == 0, "温度下限夹取为 0")
+        generationStore.setTemperature(5)
+        check(generationStore.settings.temperature == 2, "温度上限夹取为 2")
+        generationStore.setTemperature(0.35)
+        check(generationStore.settings.temperature == 0.35, "温度范围内保留原值")
+
+        generationStore.setMaxTokens(100)
+        check(generationStore.settings.maxTokens == 256, "最大输出 tokens 下限夹取为 256")
+        generationStore.setMaxTokens(99999)
+        check(generationStore.settings.maxTokens == 8192, "最大输出 tokens 上限夹取为 8192")
+        generationStore.setMaxTokens(0)
+        check(generationStore.settings.maxTokens == 0, "最大输出 tokens 的 0 保持不限")
+
+        generationStore.setSystemPrompt("持久化提示词")
+        generationStore.setTemperature(0.7)
+        generationStore.setMaxTokens(2048)
+        let generationStoreAfterRestart = NativeGenerationStore(defaults: generationDefaults)
+        check(
+            generationStoreAfterRestart.settings == NativeGenerationSettings(systemPrompt: "持久化提示词", temperature: 0.7, maxTokens: 2048),
+            "新建 store 后提示词与生成参数持久化读回一致"
+        )
+
+        generationStoreAfterRestart.resetToDefaults()
+        check(
+            generationStoreAfterRestart.settings == NativeGenerationSettings(systemPrompt: "", temperature: 0.2, maxTokens: 0)
+                && generationStoreAfterRestart.resolvedSystemPrompt(targetLanguage: "简体中文", input: "原文") == NativePromptDefaults.systemPrompt,
+            "resetToDefaults 后恢复默认"
+        )
+        generationDefaults.removePersistentDomain(forName: generationDefaultsName)
+
         if failures > 0 {
             print("\(failures) self-test(s) failed")
             exit(1)

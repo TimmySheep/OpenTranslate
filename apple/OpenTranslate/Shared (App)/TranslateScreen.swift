@@ -111,6 +111,7 @@ private struct NativeProvider: Identifiable, Hashable {
     @Published var providerId = "deepseek"
     @Published var config: [String: Any] = [:]
     private let speech = AVSpeechSynthesizer()
+    private let generationStore = NativeGenerationStore()
     let historyStore = TranslationHistoryStore()
     static let languages: [(String, String, String)] = [("cmn","简体中文","Chinese Simplified"),("cht","繁體中文","Chinese Traditional"),("eng","英语","English"),("jpn","日语","Japanese"),("kor","韩语","Korean"),("fra","法语","French"),("deu","德语","German"),("spa","西班牙语","Spanish"),("rus","俄语","Russian"),("ita","意大利语","Italian"),("por","葡萄牙语","Portuguese"),("ara","阿拉伯语","Arabic"),("hin","印地语","Hindi"),("ben","孟加拉语","Bengali"),("urd","乌尔都语","Urdu"),("ind","印度尼西亚语","Indonesian"),("msa","马来语","Malay"),("tha","泰语","Thai"),("vie","越南语","Vietnamese"),("tur","土耳其语","Turkish"),("nld","荷兰语","Dutch"),("swe","瑞典语","Swedish"),("nor","挪威语","Norwegian"),("dan","丹麦语","Danish"),("fin","芬兰语","Finnish"),("pol","波兰语","Polish"),("ukr","乌克兰语","Ukrainian"),("ces","捷克语","Czech"),("ell","希腊语","Greek"),("heb","希伯来语","Hebrew"),("fas","波斯语","Persian"),("tam","泰米尔语","Tamil"),("tel","泰卢固语","Telugu"),("mar","马拉地语","Marathi"),("guj","古吉拉特语","Gujarati"),("pan","旁遮普语","Punjabi"),("swa","斯瓦希里语","Swahili"),("ron","罗马尼亚语","Romanian"),("hun","匈牙利语","Hungarian"),("bul","保加利亚语","Bulgarian"),("hrv","克罗地亚语","Croatian"),("srp","塞尔维亚语","Serbian"),("slk","斯洛伐克语","Slovak"),("slv","斯洛文尼亚语","Slovenian"),("cat","加泰罗尼亚语","Catalan"),("eus","巴斯克语","Basque"),("glg","加利西亚语","Galician"),("isl","冰岛语","Icelandic"),("gle","爱尔兰语","Irish"),("cym","威尔士语","Welsh"),("est","爱沙尼亚语","Estonian"),("lav","拉脱维亚语","Latvian"),("lit","立陶宛语","Lithuanian"),("khm","高棉语","Khmer"),("lao","老挝语","Lao"),("mya","缅甸语","Burmese"),("nep","尼泊尔语","Nepali"),("sin","僧伽罗语","Sinhala"),("amh","阿姆哈拉语","Amharic"),("yor","约鲁巴语","Yoruba"),("zul","祖鲁语","Zulu"),("afr","南非荷兰语","Afrikaans"),("kaz","哈萨克语","Kazakh"),("uzb","乌兹别克语","Uzbek"),("mon","蒙古语","Mongolian"),("yid","意第绪语","Yiddish")]
 
@@ -187,7 +188,17 @@ private struct NativeProvider: Identifiable, Hashable {
             error = "当前模型 \(model) 不支持图片输入，请在设置里换用多模态模型"; return
         }
         let languageName = Self.languageName(targetCode)
-        let system = "你是专业翻译助手。\(imageData == nil ? "将用户输入" : "识别图片中文字并将其")翻译为\(languageName)。只返回合法 JSON，不要 Markdown 或额外文字。结构：{\"translation\":\"主译文\",\"partOfSpeech\":\"词性或空\",\"ipa\":\"音标或空\",\"alternatives\":[{\"text\":\"其他译法\",\"note\":\"使用场景\"}],\"examples\":[{\"source\":\"原句\",\"target\":\"译文\"}],\"definitions\":[\"简短释义\"]}。"
+        let generationSettings = generationStore.settings
+        let resolvedPrompt = generationStore.resolvedSystemPrompt(targetLanguage: languageName, input: text)
+        let usesBuiltInPrompt = generationSettings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || generationSettings.systemPrompt == NativePromptDefaults.systemPrompt
+        var system = resolvedPrompt
+        if usesBuiltInPrompt {
+            system = system.replacingOccurrences(of: "{{targetLanguage}}", with: languageName)
+            if imageData != nil {
+                system = system.replacingOccurrences(of: "将用户输入翻译为", with: "识别图片中文字并将其翻译为")
+            }
+        }
         var request = URLRequest(url: url, timeoutInterval: 45)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
@@ -197,7 +208,9 @@ private struct NativeProvider: Identifiable, Hashable {
             userContent = [["type": "text", "text": system], ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(imageData.base64EncodedString())"]]]
         } else { userContent = text }
         let messages: [[String: Any]] = imageData == nil ? [["role": "system", "content": system], ["role": "user", "content": userContent]] : [["role": "user", "content": userContent]]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["model": model, "messages": messages, "temperature": 0.2])
+        var requestBody: [String: Any] = ["model": model, "messages": messages, "temperature": generationSettings.temperature]
+        if generationSettings.maxTokens > 0 { requestBody["max_tokens"] = generationSettings.maxTokens }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
         isLoading = true
         defer { isLoading = false }
         do {
@@ -301,55 +314,57 @@ struct TranslateScreen: View {
                 if model.result != nil {
                     resultScreen
                 } else {
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            header
-                                .padding(.horizontal, 24)
-                                .padding(.top, 8)
-                                .frame(maxWidth: 608)
-                            if !model.hasKey {
-                                Button { showingSettings = true } label: {
-                                    Label("添加 AI 提供商后即可翻译", systemImage: "key.fill")
+                    VStack(spacing: 0) {
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 0) {
+                                header
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, 8)
+                                    .frame(maxWidth: 608)
+                                if !model.hasKey {
+                                    Button { showingSettings = true } label: {
+                                        Label("添加 AI 提供商后即可翻译", systemImage: "key.fill")
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(12)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, 12)
+                                    .frame(maxWidth: 608)
+                                }
+                                if let error = model.error {
+                                    Text(error)
+                                        .font(.callout)
+                                        .foregroundStyle(.red)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(12)
+                                        .padding(.horizontal, 24)
+                                        .frame(maxWidth: 608)
                                 }
-                                .buttonStyle(.plain)
-                                .padding(.horizontal, 24)
-                                .padding(.top, 12)
-                                .frame(maxWidth: 608)
-                            }
-                            if let error = model.error {
-                                Text(error)
-                                    .font(.callout)
-                                    .foregroundStyle(.red)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(12)
-                                    .padding(.horizontal, 24)
-                                    .frame(maxWidth: 608)
-                            }
 
-                            inputCard(height: cardHeight, maximumHistoryHeight: maximumHistoryHeight)
-                                .padding(.top, 12)
+                                inputCard(height: cardHeight, maximumHistoryHeight: maximumHistoryHeight)
+                                    .padding(.top, 12)
 
-                            if historyHeight > 0 {
-                                historyPanel
-                                    .frame(maxWidth: 560)
-                                    .frame(height: historyHeight)
-                                    .padding(.top, historyHeight)
-                                    .transition(.opacity)
+                                if historyHeight > 0 {
+                                    historyPanel
+                                        .frame(maxWidth: 560)
+                                        .frame(height: historyHeight)
+                                        .padding(.top, historyHeight)
+                                        .transition(.opacity)
+                                }
                             }
-
-                            languageBar
-                                .frame(maxWidth: 560)
-                                .padding(.horizontal, 24)
-                                .padding(.top, 12)
-                            actionBar
-                                .frame(maxWidth: 560)
-                                .padding(.horizontal, 24)
-                                .padding(.top, 20)
-                                .padding(.bottom, 20)
+                            .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: .infinity)
+
+                        actionBar
+                            .frame(maxWidth: 560)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 20)
+                        languageBar
+                            .frame(maxWidth: 560)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 12)
+                            .padding(.bottom, 12)
                     }
 #if os(macOS)
                     Button("切换历史记录") { toggleHistory(maximum: maximumHistoryHeight) }
@@ -515,21 +530,6 @@ struct TranslateScreen: View {
                     .frame(maxWidth: .infinity, minHeight: 50, alignment: .topLeading)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: beginEditing)
-                #if os(iOS)
-                if pasteAvailable {
-                    Button { pasteText() } label: {
-                        Label("粘贴", systemImage: "doc.on.clipboard")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 14)
-                            .frame(height: 30)
-                            .background(OTColor.blue, in: Capsule())
-                    }
-                    .buttonStyle(PressScaleStyle())
-                    .padding(.top, 8)
-                    .transition(.scale(scale: 0.9).combined(with: .opacity))
-                }
-                #endif
                 if !model.input.isEmpty {
                     Text("\(model.input.count) 字").font(.caption).foregroundStyle(secondaryTextColor)
                 }
@@ -648,33 +648,44 @@ struct TranslateScreen: View {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { model.chooseLanguage(model.targetCode, source: true); model.chooseLanguage(old, source: false) }
     }
     private var actionBar: some View {
-        HStack(spacing: 0) {
+        GeometryReader { geometry in
+            let centerX = geometry.size.width / 2
+            let centerY = geometry.size.height / 2
+            ZStack {
             #if os(iOS)
-            Button { showingFileImporter = true } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(primaryTextColor)
+                if pasteAvailable {
+                    Button { pasteText() } label: {
+                        Label("粘贴", systemImage: "doc.on.clipboard")
+                            .font(.system(size: 11))
+                            .foregroundStyle(primaryTextColor)
+                            .frame(width: 44, height: 30)
+                            .background(Color(hex: isDarkAppearance ? "2B2C2E" : "F1F3F4"), in: Capsule())
+                    }
                     .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .accessibilityLabel("上传文件")
+                    .buttonStyle(PressScaleStyle())
+                    .accessibilityLabel("粘贴")
+                    .position(x: centerX - 77, y: centerY)
+                }
             #else
-            Color.clear.frame(width: 44, height: 44).frame(maxWidth: .infinity, alignment: .center)
+                EmptyView()
             #endif
-            Button { showingVoiceNotice = true } label: {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 34))
-                    .foregroundStyle(micGlyphColor)
-                    .frame(width: 86, height: 86)
-                    .background(micFillColor, in: Circle())
-            }
-            .buttonStyle(PressScaleStyle())
-            .frame(maxWidth: .infinity)
-            .accessibilityLabel("语音输入")
+                Button { showingVoiceNotice = true } label: {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 34))
+                        .foregroundStyle(micGlyphColor)
+                        .frame(width: 86, height: 86)
+                        .background(micFillColor, in: Circle())
+                }
+                .buttonStyle(PressScaleStyle())
+                .accessibilityLabel("语音输入")
+                .position(x: centerX, y: centerY)
 
-            imageMenu.frame(maxWidth: .infinity, alignment: .center)
+                imageMenu
+                    .frame(width: 44, height: 44)
+                    .position(x: centerX + 77, y: centerY)
+            }
         }
+        .frame(height: 86)
     }
     private var imageMenu: some View {
         Menu {
@@ -1588,19 +1599,25 @@ private struct LanguagePickerSheet: View {
 private struct NativeSettingsSheet: View {
     @ObservedObject var model: TranslateModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedID = "deepseek"
     @State private var apiKey = ""
     @State private var modelName = "deepseek-chat"
     @State private var baseURL = NativeProvider.all[0].baseURL
     @State private var target = "cmn"
     @State private var theme = "system"
+    @State private var systemPrompt = ""
+    @State private var temperature = 0.2
+    @State private var maxTokens = 0
     @State private var saveError: String?
+    @State private var showingDefaultPromptNotice = false
     @State private var showingFullSettings = false
     @State private var showingModels = false
     @State private var modelSearch = ""
     @State private var availableModels: [String] = []
     @State private var isFetchingModels = false
     @State private var modelFetchError: String?
+    private let generationStore = NativeGenerationStore()
     private var modelCacheKey: String { ModelDirectory.cacheKey(baseURL: selected.id == "openai-compatible" ? baseURL : selected.baseURL, apiKey: apiKey) }
     private var filteredModels: [String] { availableModels.filter { modelSearch.isEmpty || $0.localizedCaseInsensitiveContains(modelSearch) } }
     private var selected: NativeProvider { NativeProvider.all.first(where: { $0.id == selectedID }) ?? NativeProvider.all[0] }
@@ -1620,7 +1637,81 @@ private struct NativeSettingsSheet: View {
                     if selected.id == "openai-compatible" { TextField("API Base URL", text: $baseURL) }
                 }
                 Section("偏好") {
-                    Picker("目标语言", selection: $target) { Text("简体中文").tag("cmn"); Text("英语").tag("eng"); Text("日语").tag("jpn"); Text("韩语").tag("kor"); Text("法语").tag("fra"); Text("德语").tag("deu"); Text("西班牙语").tag("spa"); Text("意大利语").tag("ita"); Text("俄语").tag("rus") }
+                    Picker("目标语言", selection: $target) {
+                        ForEach(TranslateModel.languages.indices, id: \.self) { index in
+                            Text(TranslateModel.languages[index].1).tag(TranslateModel.languages[index].0)
+                        }
+                    }
+                }
+                Section("AI 指令") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("系统提示词")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("恢复默认") {
+                                systemPrompt = NativePromptDefaults.systemPrompt
+                                generationStore.setSystemPrompt(systemPrompt)
+                                showingDefaultPromptNotice = true
+                            }
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(hex: "8AB4F8"))
+                        }
+
+                        systemPromptEditor
+
+                        Text("可用占位符：{{targetLanguage}} {{input}}（其余网页类占位符会替换为空）")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: 8) {
+                            promptPreset("直译", prompt: "忠实直译，保留原文结构，不要增删信息。")
+                            promptPreset("意译", prompt: "译成自然通顺的中文，优先表达原意而不是逐字对应。")
+                            promptPreset("口语", prompt: "译成口语化表达，像日常说话一样。")
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                Section("生成参数") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("温度")
+                            Spacer()
+                            Text(String(format: "%.1f", temperature))
+                                .monospacedDigit()
+                        }
+                        Slider(value: $temperature, in: 0...2, step: 0.1)
+                        Text("越低越稳定，越高越发散")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .onChange(of: temperature) { value in
+                        generationStore.setTemperature(value)
+                        temperature = generationStore.settings.temperature
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("最大输出 tokens")
+                            Spacer()
+                            Text(maxTokens == 0 ? "不限" : "\(maxTokens)")
+                                .monospacedDigit()
+                            Stepper("最大输出 tokens", value: $maxTokens, in: 0...8192, step: 256)
+                                .labelsHidden()
+                                .accessibilityLabel("最大输出 tokens")
+                        }
+                        Text("0 表示不限制")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .onChange(of: maxTokens) { value in
+                        generationStore.setMaxTokens(value)
+                        maxTokens = generationStore.settings.maxTokens
+                    }
+                }
+                Section("外观") {
                     Picker("外观", selection: $theme) { Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark") }
                 }
                 if let saveError { Text(saveError).foregroundStyle(.red) }
@@ -1653,8 +1744,61 @@ private struct NativeSettingsSheet: View {
             }
             .modifier(LargeSheetDetent())
         }
-        .onAppear { selectedID = model.providerId; target = model.targetCode; theme = UserDefaults.standard.string(forKey: nativeThemeKey) ?? "system"; loadProvider() }
+        .alert("已填入默认提示词", isPresented: $showingDefaultPromptNotice) { Button("好", role: .cancel) {} }
+        .onAppear {
+            selectedID = model.providerId
+            target = model.targetCode
+            theme = UserDefaults.standard.string(forKey: nativeThemeKey) ?? "system"
+            let settings = generationStore.settings
+            systemPrompt = settings.systemPrompt
+            temperature = settings.temperature
+            maxTokens = settings.maxTokens
+            loadProvider()
+        }
     }
+
+    @ViewBuilder private var promptTextEditor: some View {
+        if #available(iOS 16.0, macOS 13.0, *) {
+            TextEditor(text: $systemPrompt).scrollContentBackground(.hidden)
+        } else {
+            TextEditor(text: $systemPrompt)
+        }
+    }
+
+    private var systemPromptEditor: some View {
+        ZStack(alignment: .topLeading) {
+            promptTextEditor
+                .font(.system(size: 14))
+                .padding(4)
+                .accessibilityLabel("系统提示词")
+            if systemPrompt.isEmpty {
+                Text("留空则使用内置默认提示词")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 12)
+                    .padding(.leading, 12)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(minHeight: 120)
+        .background(
+            Color(hex: colorScheme == .dark ? "1F1F21" : "F1F3F4"),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onChange(of: systemPrompt) { value in generationStore.setSystemPrompt(value) }
+    }
+
+    private func promptPreset(_ title: String, prompt: String) -> some View {
+        Button(title) { systemPrompt = prompt }
+            .font(.system(size: 12))
+            .foregroundStyle(colorScheme == .dark ? Color(hex: "E8EAED") : Color(hex: "202124"))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(colorScheme == .dark ? Color(hex: "2B2C2E") : Color(hex: "F1F3F4"), in: Capsule())
+            .buttonStyle(.plain)
+    }
+
     private func hasKey(_ id: String) -> Bool { let list = model.config["providersConfig"] as? [[String: Any]] ?? []; return list.contains { ($0["provider"] as? String) == id && !(($0["apiKey"] as? String ?? "").isEmpty) } }
     private func openModelList() {
         modelFetchError = nil

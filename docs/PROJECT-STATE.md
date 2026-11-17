@@ -50,3 +50,10 @@
 | 2026-11-13 | iCloud 不做完整版；倾向轻量版（只同步非敏感项），排在方案 A 之后 |
 | 2026-11-13 | macOS 发布方式保持「审核通过后自动发布」 |
 | 2026-11-13 | 执行交给 Grok Bot：一个实现 Bot、一个审查 Bot，各自独立 |
+
+## 2026-11-18 卡片 UI 与设置开放
+
+- 原生 App 设置新增可编辑系统提示词、温度和最大输出 tokens；三项均用 App 本地 `UserDefaults` 即时持久化，实际进入翻译请求。默认目标语言 Picker 扩展到 `TranslateModel.languages` 全量语言。
+- Safari 选择器搜索框、关闭按钮和卡片样式按审计规格核对；粘贴胶囊移入动作栏，麦克风尺寸/居中与语言栏常驻位置完成调整。
+- 当前 build 号占位：**build 18**（本轮未更改 Xcode build setting、未制作 TestFlight 包）。
+- 遗留债：三项生成设置不与 Safari 扩展同步；provider 对 `max_tokens` / `max_completion_tokens` 的差异尚未逐一核实，本轮按要求统一使用 `max_tokens`；App 仍只提供单一系统提示词编辑，不移植网页端多模板及浏览器专属设置。
