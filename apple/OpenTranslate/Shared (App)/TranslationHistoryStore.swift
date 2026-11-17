@@ -32,7 +32,8 @@ final class TranslationHistoryStore: ObservableObject {
         load()
     }
 
-    func record(input: String, translation: String, sourceCode: String, targetCode: String, providerName: String) {
+    @discardableResult
+    func record(input: String, translation: String, sourceCode: String, targetCode: String, providerName: String) -> UUID {
         let entry = HistoryEntry(
             id: UUID(),
             input: input,
@@ -51,6 +52,13 @@ final class TranslationHistoryStore: ObservableObject {
         if entries.count > Self.maxEntries {
             entries.removeSubrange(Self.maxEntries..<entries.count)
         }
+        persist()
+        return entry.id
+    }
+
+    func setSaved(id: UUID, saved: Bool) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[index].isSaved = saved
         persist()
     }
 

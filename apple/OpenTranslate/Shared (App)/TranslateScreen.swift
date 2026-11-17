@@ -105,6 +105,7 @@ private struct NativeProvider: Identifiable, Hashable {
     @Published var error: String?
     @Published var isLoading = false
     @Published var hasKey = false
+    @Published var currentHistoryEntryID: UUID?
     @Published var targetCode = "cmn"
     @Published var sourceCode = "auto"
     @Published var providerId = "deepseek"
@@ -211,21 +212,17 @@ private struct NativeProvider: Identifiable, Hashable {
             } else { result = TranslationPayload(translation: cleaned, partOfSpeech: nil, ipa: nil, alternatives: nil, examples: nil, definitions: nil) }
             providerName = (item["name"] as? String) ?? provider.name
             if let translation = result?.translation {
-                historyStore.record(input: text, translation: translation, sourceCode: sourceCode, targetCode: targetCode, providerName: providerName)
+                currentHistoryEntryID = historyStore.record(input: text, translation: translation, sourceCode: sourceCode, targetCode: targetCode, providerName: providerName)
             }
         } catch {
             self.error = (error as? URLError)?.code == .timedOut ? "请求超时（45 秒），请稍后重试。" : error.localizedDescription
         }
     }
 
-    func speak() { guard let text = result?.translation else { return }; let utterance = AVSpeechUtterance(string: text); utterance.voice = AVSpeechSynthesisVoice(language: Self.bcp47(targetCode)); speech.speak(utterance) }
-    func copy() {
-        guard let text = result?.translation else { return }
-        #if os(iOS)
-        UIPasteboard.general.string = text
-        #elseif os(macOS)
-        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
-        #endif
+    func speak(_ text: String, languageCode: String) {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: Self.bcp47(languageCode))
+        speech.speak(utterance)
     }
     private static func languageName(_ code: String) -> String { languages.first(where: { $0.0 == code })?.1 ?? code }
     private static func supportsVision(_ model: String) -> Bool {
@@ -275,6 +272,8 @@ struct TranslateScreen: View {
     @State private var showingVoiceNotice = false
     @State private var showingSourceLanguages = false
     @State private var showingTargetLanguages = false
+    @State private var showingHistorySheet = false
+    @State private var showingDeleteCurrentConfirmation = false
     @State private var showingSwapNotice = false
     @State private var showingCameraNotice = false
     @State private var showingFileImporter = false
@@ -288,6 +287,7 @@ struct TranslateScreen: View {
     @State private var sourceDrag: CGFloat = 0
     @State private var targetDrag: CGFloat = 0
     @State private var sourceWidth: CGFloat = 0
+    @State private var toastMessage: String?
     @AppStorage(nativeThemeKey) private var themePreference = "system"
     @FocusState private var editorFocused: Bool
     @Environment(\.colorScheme) private var systemScheme
@@ -298,82 +298,103 @@ struct TranslateScreen: View {
             let maximumHistoryHeight = min(320, geometry.size.height * 0.42)
             ZStack {
                 pageBackground.ignoresSafeArea()
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        header
-                            .padding(.horizontal, 24)
-                            .padding(.top, 8)
-                            .frame(maxWidth: 608)
-                        if !model.hasKey {
-                            Button { showingSettings = true } label: {
-                                Label("添加 AI 提供商后即可翻译", systemImage: "key.fill")
+                if model.result != nil {
+                    resultScreen
+                } else {
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            header
+                                .padding(.horizontal, 24)
+                                .padding(.top, 8)
+                                .frame(maxWidth: 608)
+                            if !model.hasKey {
+                                Button { showingSettings = true } label: {
+                                    Label("添加 AI 提供商后即可翻译", systemImage: "key.fill")
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(12)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, 24)
+                                .padding(.top, 12)
+                                .frame(maxWidth: 608)
+                            }
+                            if let error = model.error {
+                                Text(error)
+                                    .font(.callout)
+                                    .foregroundStyle(.red)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(12)
+                                    .padding(.horizontal, 24)
+                                    .frame(maxWidth: 608)
                             }
-                            .buttonStyle(.plain)
-                            .padding(.horizontal, 24)
-                            .padding(.top, 12)
-                            .frame(maxWidth: 608)
-                        }
-                        if let error = model.error {
-                            Text(error)
-                                .font(.callout)
-                                .foregroundStyle(.red)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(12)
-                                .padding(.horizontal, 24)
-                                .frame(maxWidth: 608)
-                        }
 
-                        if model.result != nil {
-                            resultCard
-                                .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
-                                .frame(height: cardHeight, alignment: .topLeading)
-                                .padding(.horizontal, 24)
-                                .padding(.top, 12)
-                        } else {
                             inputCard(height: cardHeight, maximumHistoryHeight: maximumHistoryHeight)
                                 .padding(.top, 12)
-                        }
 
-                        if historyHeight > 0 {
-                            historyPanel
+                            if historyHeight > 0 {
+                                historyPanel
+                                    .frame(maxWidth: 560)
+                                    .frame(height: historyHeight)
+                                    .padding(.top, historyHeight)
+                                    .transition(.opacity)
+                            }
+
+                            languageBar
                                 .frame(maxWidth: 560)
-                                .frame(height: historyHeight)
-                                .padding(.top, historyHeight)
-                                .transition(.opacity)
+                                .padding(.horizontal, 24)
+                                .padding(.top, 12)
+                            actionBar
+                                .frame(maxWidth: 560)
+                                .padding(.horizontal, 24)
+                                .padding(.top, 20)
+                                .padding(.bottom, 20)
                         }
-
-                        languageBar
-                            .frame(maxWidth: 560)
-                            .padding(.horizontal, 24)
-                            .padding(.top, 12)
-                        actionBar
-                            .frame(maxWidth: 560)
-                            .padding(.horizontal, 24)
-                            .padding(.top, 20)
-                            .padding(.bottom, 20)
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                }
 #if os(macOS)
-            Button("切换历史记录") { toggleHistory(maximum: maximumHistoryHeight) }
-                .keyboardShortcut("h", modifiers: [.command, .shift])
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .accessibilityHidden(true)
-            Button("粘贴到卡片") { pasteIntoCard() }
-                .keyboardShortcut("v", modifiers: .command)
-                .disabled(editing)
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .accessibilityHidden(true)
+                    Button("切换历史记录") { toggleHistory(maximum: maximumHistoryHeight) }
+                        .keyboardShortcut("h", modifiers: [.command, .shift])
+                        .frame(width: 0, height: 0)
+                        .opacity(0)
+                        .accessibilityHidden(true)
+                    Button("粘贴到卡片") { pasteIntoCard() }
+                        .keyboardShortcut("v", modifiers: .command)
+                        .disabled(editing)
+                        .frame(width: 0, height: 0)
+                        .opacity(0)
+                        .accessibilityHidden(true)
 #endif
+                }
+                if let toastMessage {
+                    Text(toastMessage)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(hex: "303134"), in: Capsule())
+                        .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 3)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, 88)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
             }
         }
         .sheet(isPresented: $showingSettings) { NativeSettingsSheet(model: model) }
         .sheet(isPresented: $showingSourceLanguages) { LanguagePickerSheet(title: "源语言", selected: model.sourceCode, source: true) { model.chooseLanguage($0, source: true) }.modifier(LargeSheetDetent()) }
         .sheet(isPresented: $showingTargetLanguages) { LanguagePickerSheet(title: "目标语言", selected: model.targetCode, source: false) { model.chooseLanguage($0, source: false) }.modifier(LargeSheetDetent()) }
+        .sheet(isPresented: $showingHistorySheet) {
+            TranslationHistoryPanel(store: model.historyStore, height: 520, colorScheme: systemScheme) { entry in
+                selectHistoryEntry(entry)
+                showingHistorySheet = false
+            }
+            .padding(.top, 8)
+            .modifier(LargeSheetDetent())
+        }
+        .confirmationDialog("删除这条记录？", isPresented: $showingDeleteCurrentConfirmation, titleVisibility: .visible) {
+            Button("删除", role: .destructive) { deleteCurrentHistoryEntry() }
+            Button("取消", role: .cancel) {}
+        }
         .alert("语音输入将在后续版本启用", isPresented: $showingVoiceNotice) { Button("好", role: .cancel) {} }
         .alert("拍照翻译将在后续版本启用", isPresented: $showingCameraNotice) { Button("好", role: .cancel) {} }
         .alert("无法交换语言", isPresented: $showingSwapNotice) { Button("好", role: .cancel) {} } message: { Text("源语言为自动检测时，请先选择具体源语言再交换。") }
@@ -522,12 +543,7 @@ struct TranslateScreen: View {
 
     private var historyPanel: some View {
         TranslationHistoryPanel(store: model.historyStore, height: historyHeight, colorScheme: systemScheme) { entry in
-            model.input = entry.input
-            model.result = nil
-            draft = entry.input
-            editing = false
-            editorFocused = false
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { historyHeight = 0 }
+            selectHistoryEntry(entry)
         }
     }
 
@@ -705,28 +721,411 @@ struct TranslateScreen: View {
         if model.hasKey { Task { await model.translate() } } else { showingSettings = true }
     }
     #endif
-    private var resultCard: some View {
-        ScrollView { VStack(alignment: .leading, spacing: 18) {
-            HStack { Button { model.result = nil } label: { Label("返回", systemImage: "chevron.left") }; Spacer() }
-            Text(model.result?.translation ?? "").font(.system(size: 30, weight: .semibold)).textSelection(.enabled)
-            HStack(spacing: 12) { Button { model.copy() } label: { Label("复制", systemImage: "doc.on.doc") }; Button { model.speak() } label: { Label("朗读", systemImage: "speaker.wave.2") } }.buttonStyle(.bordered)
-            if let pos = model.result?.partOfSpeech, !pos.isEmpty { Text(pos + ((model.result?.ipa?.isEmpty == false) ? " · \(model.result!.ipa!)" : "")).font(.subheadline).foregroundStyle(.secondary) }
-            if let definitions = model.result?.definitions, !definitions.isEmpty { section("释义") { ForEach(definitions, id: \.self) { Text("• \($0)") } } }
-            if let alternatives = model.result?.alternatives, !alternatives.isEmpty { section("其他译法") { ForEach(alternatives) { item in VStack(alignment: .leading) { Text(item.text).fontWeight(.medium); if let note = item.note { Text(note).font(.caption).foregroundStyle(.secondary) } } } } }
-            if let examples = model.result?.examples, !examples.isEmpty { section("例句") { ForEach(examples) { item in VStack(alignment: .leading, spacing: 4) { Text(item.source); Text(item.target).foregroundStyle(.secondary) }.padding(.vertical, 3) } } }
-            Text("由 \(model.providerName) 生成 · AI 结果仅供参考").font(.caption).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(20) }
+    private var resultScreen: some View {
+        VStack(spacing: 0) {
+            resultHeader
+                .frame(maxWidth: 560)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+            ZStack(alignment: .bottomTrailing) {
+                ScrollView(showsIndicators: false) {
+                    resultContent
+                        .frame(maxWidth: 560, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 24)
+                        .padding(.bottom, 28)
+                        .frame(maxWidth: .infinity)
+                }
+                newTranslationButton
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
+            }
+            .frame(maxHeight: .infinity)
+
+            languageBar
+                .frame(maxWidth: 560)
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
+        }
+        .frame(maxWidth: 608, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(pageBackground)
     }
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View { VStack(alignment: .leading, spacing: 8) { Text(title).font(.headline); content() } }
+
+    private var resultHeader: some View {
+        HStack {
+            Button(action: returnToHome) {
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.left").font(.system(size: 18))
+                    Text("返回").font(.system(size: 15))
+                }
+                .foregroundStyle(primaryTextColor)
+                .padding(.horizontal, 16)
+                .frame(height: 44)
+                .background(cardBackground, in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: 18) {
+                Button { showingHistorySheet = true } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 18))
+                        .foregroundStyle(primaryTextColor)
+                        .frame(width: 28, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("历史记录")
+
+                Button(action: toggleCurrentSaved) {
+                    Image(systemName: isCurrentResultSaved ? "bookmark.fill" : "bookmark")
+                        .font(.system(size: 18))
+                        .foregroundStyle(primaryTextColor)
+                        .frame(width: 28, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasCurrentHistoryEntry)
+                .accessibilityLabel(isCurrentResultSaved ? "取消收藏" : "收藏")
+
+                resultActionsMenu
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .background(cardBackground, in: Capsule())
+        }
+        .frame(height: 44)
+    }
+
+    private var resultActionsMenu: some View {
+        Menu {
+            Button { copyToClipboard(model.input) } label: { Label("复制原文", systemImage: "doc.on.doc") }
+            Button { copyToClipboard(model.result?.translation ?? "") } label: { Label("复制译文", systemImage: "doc.on.doc") }
+            Button {
+                if let text = model.result?.translation { model.speak(text, languageCode: model.targetCode) }
+            } label: { Label("朗读译文", systemImage: "speaker.wave.2") }
+            Button {
+                toggleCurrentSaved()
+            } label: { Label(isCurrentResultSaved ? "取消收藏" : "收藏", systemImage: isCurrentResultSaved ? "bookmark.slash" : "bookmark") }
+            .disabled(!hasCurrentHistoryEntry)
+            Button(role: .destructive) {
+                showingDeleteCurrentConfirmation = true
+            } label: { Label("删除这条记录", systemImage: "trash") }
+            .disabled(!hasCurrentHistoryEntry)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18))
+                .foregroundStyle(primaryTextColor)
+                .frame(width: 28, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("更多操作")
+    }
+
+    private var isCurrentResultSaved: Bool {
+        guard let id = model.currentHistoryEntryID else { return false }
+        return model.historyStore.entries.first(where: { $0.id == id })?.isSaved ?? false
+    }
+
+    private var hasCurrentHistoryEntry: Bool {
+        guard let id = model.currentHistoryEntryID else { return false }
+        return model.historyStore.entries.contains(where: { $0.id == id })
+    }
+
+    private var resultContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(languageName(model.sourceCode))
+                    .font(.system(size: 12))
+                    .foregroundStyle(secondaryTextColor)
+                Text(model.input)
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(primaryTextColor)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let ipa = model.result?.ipa, !ipa.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(ipa)
+                        .font(.system(size: 12))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                HStack {
+                    Button { model.speak(model.input, languageCode: model.sourceCode) } label: {
+                        Image(systemName: "speaker.wave.2")
+                            .font(.system(size: 20))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("朗读原文")
+                    Spacer()
+                    Button { copyToClipboard(model.input) } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 20))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("复制原文")
+                }
+                .padding(.top, 2)
+            }
+
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(Color(hex: isDarkAppearance ? "8AB4F8" : "1A73E8").opacity(isDarkAppearance ? 0.4 : 0.3))
+                    .frame(width: geometry.size.width * 0.62, height: 1)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(height: 1)
+            .padding(.vertical, 18)
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text(languageName(model.targetCode))
+                    .font(.system(size: 12))
+                    .foregroundStyle(secondaryTextColor)
+                Text(model.result?.translation ?? "")
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(Color(hex: isDarkAppearance ? "8AB4F8" : "1A73E8"))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 22) {
+                    Button {
+                        if let text = model.result?.translation { model.speak(text, languageCode: model.targetCode) }
+                    } label: {
+                        Image(systemName: "speaker.wave.2")
+                            .font(.system(size: 20))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("朗读译文")
+                    Spacer()
+                    Button { copyToClipboard(model.result?.translation ?? "") } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 20))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("复制译文")
+                    resultActionsMenu
+                }
+                .padding(.top, 2)
+            }
+
+            if let examples = model.result?.examples, !examples.isEmpty {
+                examplesCard(examples)
+                    .padding(.vertical, 18)
+            }
+
+            if hasDictionaryDetails {
+                translationCard
+                    .padding(.bottom, 18)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var hasDictionaryDetails: Bool {
+        let payload = model.result
+        return !(payload?.partOfSpeech?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            || !(payload?.definitions?.isEmpty ?? true)
+            || !(payload?.alternatives?.isEmpty ?? true)
+    }
+
+    private var cardStroke: Color {
+        Color(hex: isDarkAppearance ? "8AB4F8" : "1A73E8").opacity(0.55)
+    }
+
+    private func examplesCard(_ examples: [TranslationExample]) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("“\(model.input)”的示例")
+                .font(.system(size: 13))
+                .foregroundStyle(secondaryTextColor)
+            ForEach(examples) { example in
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "quote.opening")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color(hex: isDarkAppearance ? "8AB4F8" : "1A73E8"))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(example.source)
+                            .font(.system(size: 15))
+                            .foregroundStyle(primaryTextColor)
+                        if !example.target.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(example.target)
+                                .font(.system(size: 13))
+                                .foregroundStyle(secondaryTextColor)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(cardStroke, lineWidth: 1))
+    }
+
+    private var translationCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("“\(model.input)”的翻译")
+                .font(.system(size: 13))
+                .foregroundStyle(secondaryTextColor)
+
+            if let partOfSpeech = model.result?.partOfSpeech,
+               !partOfSpeech.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(partOfSpeech)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+            }
+
+            if let definitions = model.result?.definitions {
+                ForEach(Array(definitions.enumerated()), id: \.offset) { item in
+                    Text(item.element)
+                        .font(.system(size: 15))
+                        .foregroundStyle(primaryTextColor)
+                }
+            }
+
+            if let alternatives = model.result?.alternatives, !alternatives.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    if model.result?.definitions?.isEmpty == false {
+                        Text("近义词")
+                            .font(.system(size: 13))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), alignment: .leading)], alignment: .leading, spacing: 10) {
+                        ForEach(alternatives) { alternative in
+                            Button { copyToClipboard(alternative.text) } label: {
+                                Text(alternative.text)
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(Color(hex: isDarkAppearance ? "8AB4F8" : "1A73E8"))
+                                    .padding(.horizontal, 16)
+                                    .frame(height: 40)
+                                    .overlay(Capsule().stroke(Color(hex: "5F6368"), lineWidth: 1))
+                                    .frame(minHeight: 44)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel([alternative.text, alternative.note].compactMap { $0 }.joined(separator: "，"))
+                            .accessibilityHint("轻点复制这个词")
+                        }
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(cardStroke, lineWidth: 1))
+    }
+
+    private var newTranslationButton: some View {
+        Button(action: startNewTranslation) {
+            HStack(spacing: 10) {
+                Image(systemName: "plus").font(.system(size: 18))
+                Text("新翻译").font(.system(size: 15))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .frame(height: 52)
+            .background(Color(hex: isDarkAppearance ? "1D4973" : "1A73E8"), in: Capsule())
+        }
+        .buttonStyle(PressScaleStyle())
+        .accessibilityLabel("新翻译")
+    }
+
+    private func returnToHome() {
+        model.result = nil
+        model.currentHistoryEntryID = nil
+        editorFocused = false
+    }
+
+    private func startNewTranslation() {
+        model.input = ""
+        model.result = nil
+        model.currentHistoryEntryID = nil
+        model.error = nil
+        draft = ""
+        editing = false
+        editorFocused = false
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { historyHeight = 0 }
+    }
+
+    private func selectHistoryEntry(_ entry: HistoryEntry) {
+        model.input = entry.input
+        model.sourceCode = entry.sourceCode
+        model.targetCode = entry.targetCode
+        model.providerName = entry.providerName
+        model.result = TranslationPayload(
+            translation: entry.translation,
+            partOfSpeech: nil,
+            ipa: nil,
+            alternatives: nil,
+            examples: nil,
+            definitions: nil
+        )
+        model.currentHistoryEntryID = entry.id
+        draft = entry.input
+        editing = false
+        editorFocused = false
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { historyHeight = 0 }
+    }
+
+    private func deleteCurrentHistoryEntry() {
+        guard let id = model.currentHistoryEntryID, hasCurrentHistoryEntry else { return }
+        model.historyStore.delete(id: id)
+        model.currentHistoryEntryID = nil
+        model.result = nil
+        showToast("已删除记录")
+    }
+
+    private func toggleCurrentSaved() {
+        guard let id = model.currentHistoryEntryID, hasCurrentHistoryEntry else { return }
+        let saved = !isCurrentResultSaved
+        model.historyStore.setSaved(id: id, saved: saved)
+        #if os(iOS)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+        showToast(saved ? "已收藏" : "已取消收藏")
+    }
+
+    private func copyToClipboard(_ text: String) {
+        guard !text.isEmpty else { return }
+        #if os(iOS)
+        UIPasteboard.general.string = text
+        #elseif os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #endif
+        showToast("已复制")
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { toastMessage = message }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            if toastMessage == message {
+                withAnimation(.easeOut(duration: 0.2)) { toastMessage = nil }
+            }
+        }
+    }
+
     private func languageName(_ code: String) -> String { code == "auto" ? "自动检测" : (TranslateModel.languages.first(where: { $0.0 == code })?.1 ?? code) }
 }
 
 private struct TranslationHistoryPanel: View {
+    private enum Segment: String, CaseIterable {
+        case history = "历史记录"
+        case saved = "已保存"
+    }
+
     @ObservedObject var store: TranslationHistoryStore
     let height: CGFloat
     let colorScheme: ColorScheme
     let onSelect: (HistoryEntry) -> Void
 
+    @State private var selectedSegment: Segment = .history
     @State private var showingClearConfirmation = false
     @State private var showingDeleteConfirmation = false
     @State private var entryToDelete: HistoryEntry?
@@ -735,30 +1134,46 @@ private struct TranslationHistoryPanel: View {
     private var primaryText: Color { Color(hex: isDark ? "E8EAED" : "202124") }
     private var secondaryText: Color { Color(hex: isDark ? "9AA0A6" : "5F6368") }
     private var panelColor: Color { Color(hex: isDark ? "1B1C1E" : "F8F9FA") }
+    private var displayedEntries: [HistoryEntry] {
+        let entries = selectedSegment == .saved ? store.entries.filter(\.isSaved) : store.entries
+        return entries.sorted { $0.createdAt > $1.createdAt }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("历史记录")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(primaryText)
+                HStack(spacing: 4) {
+                    ForEach(Segment.allCases, id: \.self) { segment in
+                        Button { withAnimation(.easeInOut(duration: 0.16)) { selectedSegment = segment } } label: {
+                            Text(segment.rawValue)
+                                .font(.system(size: 13, weight: selectedSegment == segment ? .semibold : .regular))
+                                .foregroundStyle(primaryText)
+                                .frame(height: 32)
+                                .padding(.horizontal, 12)
+                                .background(selectedSegment == segment ? Color(hex: isDark ? "2B2C2E" : "E8EAED") : .clear, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 Spacer()
-                Button("清空") { showingClearConfirmation = true }
-                    .font(.system(size: 13))
-                    .foregroundStyle(secondaryText)
-                    .disabled(store.entries.isEmpty)
+                if selectedSegment == .history {
+                    Button("清空") { showingClearConfirmation = true }
+                        .font(.system(size: 13))
+                        .foregroundStyle(secondaryText)
+                        .disabled(store.entries.isEmpty)
+                }
             }
             .padding(.bottom, 8)
 
-            if store.entries.isEmpty {
-                Text("还没有翻译记录")
+            if displayedEntries.isEmpty {
+                Text(selectedSegment == .saved ? "还没有已保存的记录" : "还没有翻译记录")
                     .font(.system(size: 13))
                     .foregroundStyle(secondaryText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(store.entries) { entry in
+                        ForEach(displayedEntries) { entry in
                             historyRow(entry)
                         }
                     }
@@ -792,12 +1207,17 @@ private struct TranslationHistoryPanel: View {
                         .font(.system(size: 15))
                         .foregroundStyle(primaryText)
                         .lineLimit(1)
-                    Text(entry.translation)
+                Text(entry.translation)
                         .font(.system(size: 13))
                         .foregroundStyle(secondaryText)
                         .lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                if entry.isSaved {
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(secondaryText)
+                }
                 Text(relativeTime(entry.createdAt))
                     .font(.system(size: 11))
                     .foregroundStyle(secondaryText)
@@ -932,74 +1352,237 @@ private struct LanguagePickerSheet: View {
     let source: Bool
     let onSelect: (String) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var query = ""
-    @State private var pinned = Set(UserDefaults.standard.stringArray(forKey: "pinnedLanguageCodes") ?? ["cmn", "cht", "eng", "jpn", "kor"])
+    @State private var pinStore: LanguagePinStore
+    @State private var pinnedCodes: [String]
     private let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init)
+
+    init(title: String, selected: String, source: Bool, onSelect: @escaping (String) -> Void) {
+        self.title = title
+        self.selected = selected
+        self.source = source
+        self.onSelect = onSelect
+        let knownCodes = Set(TranslateModel.languages.map(\.0))
+        let store = LanguagePinStore(validCodes: knownCodes)
+        _pinStore = State(initialValue: store)
+        _pinnedCodes = State(initialValue: store.pinned)
+    }
+
+    private var isDark: Bool { colorScheme == .dark }
+    private var pageColor: Color { Color(hex: isDark ? "131314" : "FFFFFF") }
+    private var cardColor: Color { Color(hex: isDark ? "1F1F21" : "F1F3F4") }
+    private var searchColor: Color { Color(hex: isDark ? "2B2C2E" : "F1F3F4") }
+    private var primaryText: Color { Color(hex: isDark ? "E8EAED" : "202124") }
+    private var secondaryText: Color { Color(hex: isDark ? "9AA0A6" : "5F6368") }
+    private var selectedColor: Color { Color(hex: isDark ? "1D4973" : "1A73E8") }
+    private var separatorColor: Color { Color(hex: isDark ? "2A2B2D" : "DADCE0") }
+    private let suggestedCodes = ["eng", "cmn", "jpn", "kor", "spa", "fra"]
+
     private var filtered: [(String, String, String)] {
-        TranslateModel.languages.filter { item in query.isEmpty || item.0.localizedCaseInsensitiveContains(query) || item.1.localizedCaseInsensitiveContains(query) || item.2.localizedCaseInsensitiveContains(query) }
+        TranslateModel.languages.filter(matches)
     }
-    private var filteredPinned: [(String, String, String)] { filtered.filter { pinned.contains($0.0) }.sorted { $0.1.localizedCompare($1.1) == .orderedAscending } }
+
+    private var filteredPinned: [(String, String, String)] {
+        pinnedCodes.compactMap { code in TranslateModel.languages.first(where: { $0.0 == code }) }
+            .filter(matches)
+    }
+
+    private var suggestions: [(String, String, String)] {
+        var items: [(String, String, String)] = []
+        if source && matches(("auto", "检测语言", "auto")) {
+            items.append(("auto", "检测语言", "auto"))
+        }
+        items += suggestedCodes.compactMap { code in
+            guard !pinnedCodes.contains(code), let item = TranslateModel.languages.first(where: { $0.0 == code }), matches(item) else { return nil }
+            return item
+        }
+        return items
+    }
+
     private var groups: [(String, [(String, String, String)])] {
-        Dictionary(grouping: filtered.filter { !pinned.contains($0.0) }, by: { String($0.2.prefix(1)).uppercased() }).map { ($0.key, $0.value.sorted { $0.2 < $1.2 }) }.sorted { $0.0 < $1.0 }
+        Dictionary(grouping: filtered.filter { !pinnedCodes.contains($0.0) }, by: { String($0.2.prefix(1)).uppercased() })
+            .map { ($0.key, $0.value.sorted { $0.2.localizedCaseInsensitiveCompare($1.2) == .orderedAscending }) }
+            .sorted { $0.0 < $1.0 }
     }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack { Spacer(); Spacer(); Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(OTColor.primary).frame(width: 36, height: 36).background(OTColor.search, in: Circle()) }.buttonStyle(PressScaleStyle()) }
-                .overlay(alignment: .center) { Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(OTColor.primary).allowsHitTesting(false) }.padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 16)
-            HStack(spacing: 10) { Image(systemName: "magnifyingglass").foregroundStyle(OTColor.secondary); TextField("搜索", text: $query).font(.system(size: 14)).foregroundStyle(OTColor.primary).autocorrectionDisabled() }
-                .padding(.horizontal, 14).frame(height: 44).background(OTColor.search, in: RoundedRectangle(cornerRadius: 22)).padding(.horizontal, 20).padding(.bottom, 20)
+            HStack {
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(primaryText)
+                        .frame(width: 44, height: 44)
+                        .background(searchColor, in: Circle())
+                }
+                .buttonStyle(PressScaleStyle())
+            }
+            .overlay(alignment: .center) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(primaryText)
+                    .allowsHitTesting(false)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 16)
+
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 18))
+                    .foregroundStyle(secondaryText)
+                TextField("搜索", text: $query)
+                    .font(.system(size: 15))
+                    .foregroundStyle(primaryText)
+                    .autocorrectionDisabled()
+            }
+            .padding(.horizontal, 20)
+            .frame(height: 52)
+            .background(searchColor, in: RoundedRectangle(cornerRadius: 26))
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+
             ScrollViewReader { proxy in
                 ZStack(alignment: .trailing) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
                             if !filteredPinned.isEmpty {
                                 sectionTitle("已置顶的语言")
-                                languageCard(filteredPinned, proxy: proxy)
+                                languageCard(filteredPinned)
                             }
-                            sectionTitle("建议的语言")
-                            languageCard((source ? [("auto", "检测语言", "auto")] : []) + filtered.filter { ["eng","cmn","jpn","kor","spa","fra"].contains($0.0) && !pinned.contains($0.0) }, proxy: proxy, detection: source)
+                            if !suggestions.isEmpty {
+                                sectionTitle("建议的语言")
+                                languageCard(suggestions)
+                            }
                             ForEach(groups, id: \.0) { letter, entries in
-                                Text(letter).font(.system(size: 13, weight: .semibold)).foregroundStyle(OTColor.secondary).id(letter).padding(.leading, 16)
-                                languageCard(entries, proxy: proxy)
+                                sectionTitle(letter).id(letter)
+                                languageCard(entries)
                             }
-                        }.padding(.horizontal, 18).padding(.top, 2).padding(.bottom, 24).offset(y: 0)
-                            .transition(.move(edge: .bottom).combined(with: .opacity)).animation(.spring(response: 0.42, dampingFraction: 0.85), value: query)
+                        }
+                        .padding(.leading, 18)
+                        .padding(.trailing, 24)
+                        .padding(.top, 2)
+                        .padding(.bottom, 24)
+                        .animation(.spring(response: 0.42, dampingFraction: 0.85), value: query)
                     }
-                    VStack(spacing: 2) { ForEach(alphabet, id: \.self) { letter in Button(letter) { withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { proxy.scrollTo(letter, anchor: .top) } }.font(.system(size: 11)).foregroundStyle(Color(red: 138/255, green: 180/255, blue: 248/255)).frame(width: 16) } }.padding(.trailing, 2)
+                    VStack(spacing: 2) {
+                        ForEach(alphabet, id: \.self) { letter in
+                            Button(letter) {
+                                withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { proxy.scrollTo(letter, anchor: .top) }
+                            }
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(hex: isDark ? "8AB4F8" : "1A73E8"))
+                            .frame(width: 16)
+                        }
+                    }
+                    .padding(.trailing, 2)
                 }
             }
-        }.background(OTColor.panel.ignoresSafeArea()).preferredColorScheme(.dark)
+        }
+        .background(pageColor.ignoresSafeArea())
     }
-    private func sectionTitle(_ text: String) -> some View { Text(text).font(.system(size: 13)).foregroundStyle(OTColor.secondary).padding(.leading, 16) }
-    private func languageCard(_ items: [(String, String, String)], proxy: ScrollViewProxy, detection: Bool = false) -> some View {
+
+    private func matches(_ item: (String, String, String)) -> Bool {
+        query.isEmpty || item.0.localizedCaseInsensitiveContains(query)
+            || item.1.localizedCaseInsensitiveContains(query)
+            || item.2.localizedCaseInsensitiveContains(query)
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13))
+            .foregroundStyle(secondaryText)
+            .padding(.leading, 16)
+    }
+
+    private func languageCard(_ items: [(String, String, String)]) -> some View {
         VStack(spacing: 0) {
-            ForEach(items, id: \.0) { code, name, english in
-                HStack(spacing: 8) {
-                    HStack(spacing: 12) {
-                        Group {
-                            if code == "auto" { Image(systemName: "sparkles").foregroundStyle(Color(red: 138/255, green: 180/255, blue: 248/255)) }
-                            else { Color.clear }
-                        }.font(.system(size: 16)).frame(width: 18)
-                        Text(name).font(.system(size: 16)).foregroundStyle(OTColor.primary)
-                        Spacer(minLength: 0)
-                        if selected == code { Image(systemName: "checkmark").font(.system(size: 18)).foregroundStyle(.white).transition(.scale) }
-                    }
-                    .contentShape(Rectangle()).onTapGesture { onSelect(code); dismiss() }
-                    if code != "auto" {
-                        Button { togglePin(code) } label: {
-                            Image(systemName: pinned.contains(code) ? "pin.slash" : "pin")
-                                .font(.system(size: 15))
-                                .foregroundStyle(pinned.contains(code) ? OTColor.yellow : OTColor.secondary)
-                                .frame(width: 36, height: 44).contentShape(Rectangle())
-                        }.buttonStyle(.plain)
-                            .accessibilityLabel(pinned.contains(code) ? "取消置顶 \(name)" : "置顶 \(name)")
-                    }
-                }.padding(.leading, 16).padding(.trailing, 8).frame(height: 56).background(selected == code ? OTColor.selected : Color.clear)
-                if code != items.last?.0 { Rectangle().fill(OTColor.separator).frame(height: 1).padding(.leading, 52) }
+            ForEach(items, id: \.0) { item in
+                languageRow(item)
+                if item.0 != items.last?.0 {
+                    Rectangle().fill(separatorColor).frame(height: 1).padding(.leading, 52)
+                }
             }
-        }.background(OTColor.background, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .background(cardColor, in: RoundedRectangle(cornerRadius: 20))
     }
-    private func togglePin(_ code: String) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { if pinned.contains(code) { pinned.remove(code) } else { pinned.insert(code) }; UserDefaults.standard.set(Array(pinned), forKey: "pinnedLanguageCodes") } }
+
+    private func languageRow(_ item: (String, String, String)) -> some View {
+        let code = item.0
+        let name = item.1
+        let isPinned = pinStore.isPinned(code)
+
+        return HStack(spacing: 12) {
+            Button { if code != "auto" { togglePin(code) } } label: {
+                Group {
+                    if code == "auto" {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Color(hex: isDark ? "8AB4F8" : "1A73E8"))
+                    } else if isPinned {
+                        ZStack {
+                            Circle().fill(Color(hex: isDark ? "8AB4F8" : "1A73E8"))
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    } else {
+                        Image(systemName: "arrow.down.circle")
+                            .foregroundStyle(secondaryText)
+                    }
+                }
+                .font(.system(size: 24))
+                .frame(width: 24, height: 24)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(code == "auto" ? "检测语言" : (isPinned ? "取消置顶 \(name)" : "置顶 \(name)"))
+            .disabled(code == "auto")
+
+            Button {
+                onSelect(code)
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Text(name)
+                        .font(.system(size: 16))
+                        .foregroundStyle(selected == code ? .white : primaryText)
+                    Spacer(minLength: 0)
+                    if selected == code {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .transition(.scale)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 16)
+        .frame(height: 56)
+        .background(selected == code ? selectedColor : .clear)
+        .contextMenu {
+            if code != "auto" {
+                Button {
+                    togglePin(code)
+                } label: {
+                    Label(isPinned ? "取消置顶" : "置顶", systemImage: isPinned ? "pin.slash" : "pin")
+                }
+            }
+        }
+    }
+
+    private func togglePin(_ code: String) {
+        guard code != "auto" else { return }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            pinStore.toggle(code)
+            pinnedCodes = pinStore.pinned
+        }
+    }
 }
 
 private struct NativeSettingsSheet: View {

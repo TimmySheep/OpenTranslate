@@ -80,6 +80,47 @@ private enum AppStateSelfTest {
         check(!FileManager.default.fileExists(atPath: corruptURL.path), "坏文件改名而非删除")
         check(FileManager.default.fileExists(atPath: root.appendingPathComponent("history.corrupt.json").path), "坏文件保留为 history.corrupt.json")
 
+        let savedURL = root.appendingPathComponent("saved.json")
+        let savedStore = TranslationHistoryStore(fileURL: savedURL)
+        let savedID = savedStore.record(input: "saved", translation: "已收藏译文", sourceCode: "eng", targetCode: "cmn", providerName: "Test")
+        savedStore.setSaved(id: savedID, saved: true)
+        check(savedStore.entries.first?.isSaved == true, "收藏状态写入对应历史记录")
+        let savedAfterRestart = TranslationHistoryStore(fileURL: savedURL)
+        check(savedAfterRestart.entries.first?.isSaved == true, "收藏状态重启后读回")
+        savedAfterRestart.delete(id: savedID)
+        check(savedAfterRestart.entries.filter(\.isSaved).isEmpty, "删除记录后收藏状态随记录消失")
+
+        let pinDefaultsName = "OpenTranslateAppStateSelfTest-\(UUID().uuidString)"
+        let pinDefaults = UserDefaults(suiteName: pinDefaultsName)!
+        let pinKey = "pinnedLanguageCodes"
+        let validLanguageCodes: Set<String> = ["eng", "jpn", "fra"]
+
+        pinDefaults.set([String](), forKey: pinKey)
+        let pinStore = LanguagePinStore(defaults: pinDefaults, key: pinKey, validCodes: validLanguageCodes)
+        pinStore.pin("eng")
+        pinStore.pin("jpn")
+        check(pinStore.pinned == ["jpn", "eng"], "置顶顺序为后置顶在前")
+
+        pinStore.pin("eng")
+        check(pinStore.pinned == ["jpn", "eng"], "重复置顶不增加条目且不改变顺序")
+
+        pinStore.unpin("jpn")
+        check(!pinStore.isPinned("jpn") && !pinStore.pinned.contains("jpn"), "取消置顶后从置顶列表消失")
+
+        pinStore.pin("fra")
+        let pinStoreAfterRestart = LanguagePinStore(defaults: pinDefaults, key: pinKey, validCodes: validLanguageCodes)
+        check(pinStoreAfterRestart.pinned == ["fra", "eng"], "置顶状态与顺序重启后读回")
+
+        pinDefaults.set(["jpn", "eng", "jpn", "unknown"], forKey: pinKey)
+        let migratedPinStore = LanguagePinStore(defaults: pinDefaults, key: pinKey, validCodes: validLanguageCodes)
+        check(migratedPinStore.pinned == ["jpn", "eng"], "兼容旧 key 并保序去重、忽略未知语言")
+        check(pinDefaults.stringArray(forKey: pinKey) == ["jpn", "eng"], "迁移后将清理结果写回旧 key")
+
+        pinDefaults.set([String](), forKey: pinKey)
+        let emptyPinStore = LanguagePinStore(defaults: pinDefaults, key: pinKey, validCodes: validLanguageCodes)
+        check(emptyPinStore.pinned.isEmpty, "空置顶状态保持为空")
+        pinDefaults.removePersistentDomain(forName: pinDefaultsName)
+
         if failures > 0 {
             print("\(failures) self-test(s) failed")
             exit(1)

@@ -31,6 +31,8 @@
 		AA1000010000000000000003 /* TranslateScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000002 /* TranslateScreen.swift */; };
 		AA2000010000000000000001 /* TranslationHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2000010000000000000003 /* TranslationHistoryStore.swift */; };
 		AA2000010000000000000002 /* TranslationHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2000010000000000000003 /* TranslationHistoryStore.swift */; };
+		AA3000010000000000000001 /* LanguagePinStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3000010000000000000003 /* LanguagePinStore.swift */; };
+		AA3000010000000000000002 /* LanguagePinStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3000010000000000000003 /* LanguagePinStore.swift */; };
 		11EEF83A2FE586BB003E1F8A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */; };
 		11EEF83B2FE586BB003E1F8A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */; };
 		AA1000010000000000000004 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000005 /* AppIcon.icon */; };
@@ -117,6 +119,7 @@
 		11EEF7FA2FE586BB003E1F8A /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		AA1000010000000000000002 /* TranslateScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslateScreen.swift; sourceTree = "<group>"; };
 		AA2000010000000000000003 /* TranslationHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationHistoryStore.swift; sourceTree = "<group>"; };
+		AA3000010000000000000003 /* LanguagePinStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguagePinStore.swift; sourceTree = "<group>"; };
 		11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA1000010000000000000005 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		11EEF7FD2FE586BB003E1F8A /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
@@ -205,6 +208,7 @@
 				11EEF7FA2FE586BB003E1F8A /* ViewController.swift */,
 				AA1000010000000000000002 /* TranslateScreen.swift */,
 				AA2000010000000000000003 /* TranslationHistoryStore.swift */,
+				AA3000010000000000000003 /* LanguagePinStore.swift */,
 				11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */,
 				AA1000010000000000000005 /* AppIcon.icon */,
 				11EEF7F42FE586BB003E1F8A /* Resources */,
@@ -518,6 +522,7 @@
 				11EEF8382FE586BB003E1F8A /* ViewController.swift in Sources */,
 				AA1000010000000000000001 /* TranslateScreen.swift in Sources */,
 				AA2000010000000000000001 /* TranslationHistoryStore.swift in Sources */,
+				AA3000010000000000000001 /* LanguagePinStore.swift in Sources */,
 				11EEF8062FE586BB003E1F8A /* AppDelegate.swift in Sources */,
 				11EEF8082FE586BB003E1F8A /* SceneDelegate.swift in Sources */,
 				11EEF9022FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
@@ -532,6 +537,7 @@
 				11EEF8392FE586BB003E1F8A /* ViewController.swift in Sources */,
 				AA1000010000000000000003 /* TranslateScreen.swift in Sources */,
 				AA2000010000000000000002 /* TranslationHistoryStore.swift in Sources */,
+				AA3000010000000000000002 /* LanguagePinStore.swift in Sources */,
 				11EEF8172FE586BB003E1F8A /* AppDelegate.swift in Sources */,
 				11EEF9032FE586BB003E1F8A /* SharedSettingsStore.swift in Sources */,
 				11EEF9122FE586BB003E1F8A /* CloudSettingsSync.swift in Sources */,
