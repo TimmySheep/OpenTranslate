@@ -279,7 +279,6 @@ struct TranslateScreen: View {
     @State private var showingPDFImporter = false
     #if os(iOS)
     @State private var pasteAvailable = false
-    @State private var showingUploadMenu = false
     @State private var showingPhotoPicker = false
     #endif
     @State private var sourceDrag: CGFloat = 0
@@ -332,10 +331,6 @@ struct TranslateScreen: View {
         .alert("拍照翻译将在后续版本启用", isPresented: $showingCameraNotice) { Button("好", role: .cancel) {} }
         .alert("无法交换语言", isPresented: $showingSwapNotice) { Button("好", role: .cancel) {} } message: { Text("源语言为自动检测时，请先选择具体源语言再交换。") }
         #if os(iOS)
-        .confirmationDialog("上传", isPresented: $showingUploadMenu, titleVisibility: .visible) {
-            Button("从照片选择") { showingPhotoPicker = true }
-            Button("选择文档") { showingPDFImporter = true }
-        }
         .sheet(isPresented: $showingPhotoPicker) {
             if #available(iOS 16.0, *) { NativePhotosPicker { model.translateImage($0) } }
             else { Text("照片选择需要 iOS 16 或更新版本。") }
@@ -409,7 +404,7 @@ struct TranslateScreen: View {
     private var inputArea: some View {
         VStack(alignment: .leading, spacing: 8) {
             if editing {
-                HStack { Button("取消") { draft = model.input; editing = false }; Spacer(); Button { model.input = draft; editing = false; if model.hasKey { Task { await model.translate() } } } label: { Text("完成").font(.system(size: 16, weight: .semibold)) } }
+                HStack { Spacer(); Text("按 Enter 完成").font(.caption).foregroundStyle(.secondary) }
                 editorView
                 HStack { Spacer(); Text("\(draft.count) 字").font(.caption).foregroundStyle(.secondary) }
             } else {
@@ -426,11 +421,21 @@ struct TranslateScreen: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).contentShape(Rectangle()).onTapGesture { if !editing { draft = model.input; withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { editing = true } } }
     }
     @ViewBuilder private var editorView: some View {
-        if #available(iOS 16.0, macOS 13.0, *) {
+        #if os(iOS)
+        ReturnCommitTextEditor(text: $draft, onSubmit: commitEditing)
+        #else
+        if #available(macOS 13.0, *) {
             TextEditor(text: $draft).scrollContentBackground(.hidden).focused($editorFocused).accessibilityLabel("输入待翻译文字")
         } else {
             TextEditor(text: $draft).focused($editorFocused).accessibilityLabel("输入待翻译文字")
         }
+        #endif
+    }
+    private func commitEditing() {
+        guard editing else { return }
+        model.input = draft
+        editing = false
+        if model.hasKey { Task { await model.translate() } }
     }
     private var languageBar: some View {
         HStack(spacing: 0) {
@@ -464,7 +469,13 @@ struct TranslateScreen: View {
     private var actionBar: some View {
         HStack(spacing: 0) {
             #if os(iOS)
-            Button { showingUploadMenu = true } label: { Image(systemName: "plus").font(.system(size: 18, weight: .medium)).foregroundStyle(.white).frame(width: 44, height: 44).background(Color(hex: "1D4973"), in: Circle()) }.buttonStyle(PressScaleStyle()).frame(maxWidth: .infinity).accessibilityLabel("上传")
+            Menu {
+                Button { showingPhotoPicker = true } label: { Label("从照片选择", systemImage: "photo.on.rectangle") }
+                Button { showingPDFImporter = true } label: { Label("选择文档", systemImage: "doc") }
+            } label: {
+                Image(systemName: "plus").font(.system(size: 18, weight: .medium)).foregroundStyle(.white).frame(width: 44, height: 44).background(Color(hex: "1D4973"), in: Circle())
+            }.menuIndicator(.hidden).buttonStyle(.plain)
+                .frame(width: 44, height: 44).frame(maxWidth: .infinity, alignment: .center).accessibilityLabel("上传")
             #else
             Color.clear.frame(maxWidth: .infinity)
             #endif
@@ -538,6 +549,55 @@ private extension UIImage {
         return UIGraphicsImageRenderer(size: newSize).image { _ in draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 }
+
+/// A text view whose Return key finishes editing instead of inserting a newline.
+/// Pasting multi-line text still keeps its line breaks.
+private struct ReturnCommitTextEditor: UIViewRepresentable {
+    @Binding var text: String
+    let onSubmit: () -> Void
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: ReturnCommitTextEditor
+        var focusedOnce = false
+        init(_ parent: ReturnCommitTextEditor) { self.parent = parent }
+        func textViewDidChange(_ textView: UITextView) { parent.text = textView.text }
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String) -> Bool {
+            if replacement == "\n" {
+                textView.resignFirstResponder()
+                parent.onSubmit()
+                return false
+            }
+            return true
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.backgroundColor = .clear
+        view.isScrollEnabled = true
+        view.alwaysBounceVertical = false
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.font = .preferredFont(forTextStyle: .body)
+        view.adjustsFontForContentSizeCategory = true
+        view.textColor = .label
+        view.returnKeyType = .done
+        view.accessibilityLabel = "输入待翻译文字"
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        context.coordinator.parent = self
+        if view.text != text { view.text = text }
+        if !context.coordinator.focusedOnce {
+            context.coordinator.focusedOnce = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak view] in view?.becomeFirstResponder() }
+        }
+    }
+}
 #endif
 
 private struct PressScaleStyle: ButtonStyle {
@@ -579,8 +639,10 @@ private struct LanguagePickerSheet: View {
                 ZStack(alignment: .trailing) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
-                            sectionTitle("已置顶的语言")
-                            languageCard(filteredPinned, proxy: proxy)
+                            if !filteredPinned.isEmpty {
+                                sectionTitle("已置顶的语言")
+                                languageCard(filteredPinned, proxy: proxy)
+                            }
                             sectionTitle("建议的语言")
                             languageCard((source ? [("auto", "检测语言", "auto")] : []) + filtered.filter { ["eng","cmn","jpn","kor","spa","fra"].contains($0.0) && !pinned.contains($0.0) }, proxy: proxy, detection: source)
                             ForEach(groups, id: \.0) { letter, entries in
@@ -599,20 +661,27 @@ private struct LanguagePickerSheet: View {
     private func languageCard(_ items: [(String, String, String)], proxy: ScrollViewProxy, detection: Bool = false) -> some View {
         VStack(spacing: 0) {
             ForEach(items, id: \.0) { code, name, english in
-                HStack(spacing: 12) {
-                    Group {
-                        if code == "auto" { Image(systemName: "sparkles").foregroundStyle(Color(red: 138/255, green: 180/255, blue: 248/255)) }
-                        else if pinned.contains(code) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.white) }
-                        else { Color.clear }
-                    }.font(.system(size: 18)).frame(width: 18)
-                    Text(name).font(.system(size: 16)).foregroundStyle(OTColor.primary)
-                    Spacer()
-                    if selected == code { Image(systemName: "checkmark").font(.system(size: 18)).foregroundStyle(.white).scaleEffect(1).transition(.scale) }
-                }.padding(.horizontal, 16).frame(height: 56).background(selected == code ? OTColor.selected : Color.clear)
-                    .contentShape(Rectangle()).onTapGesture { onSelect(code); dismiss() }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button { togglePin(code) } label: { Label(pinned.contains(code) ? "取消置顶" : "置顶", systemImage: pinned.contains(code) ? "pin.slash" : "pin.fill") }.tint(OTColor.yellow)
+                HStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Group {
+                            if code == "auto" { Image(systemName: "sparkles").foregroundStyle(Color(red: 138/255, green: 180/255, blue: 248/255)) }
+                            else { Color.clear }
+                        }.font(.system(size: 16)).frame(width: 18)
+                        Text(name).font(.system(size: 16)).foregroundStyle(OTColor.primary)
+                        Spacer(minLength: 0)
+                        if selected == code { Image(systemName: "checkmark").font(.system(size: 18)).foregroundStyle(.white).transition(.scale) }
                     }
+                    .contentShape(Rectangle()).onTapGesture { onSelect(code); dismiss() }
+                    if code != "auto" {
+                        Button { togglePin(code) } label: {
+                            Image(systemName: pinned.contains(code) ? "pin.slash" : "pin")
+                                .font(.system(size: 15))
+                                .foregroundStyle(pinned.contains(code) ? OTColor.yellow : OTColor.secondary)
+                                .frame(width: 36, height: 44).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                            .accessibilityLabel(pinned.contains(code) ? "取消置顶 \(name)" : "置顶 \(name)")
+                    }
+                }.padding(.leading, 16).padding(.trailing, 8).frame(height: 56).background(selected == code ? OTColor.selected : Color.clear)
                 if code != items.last?.0 { Rectangle().fill(OTColor.separator).frame(height: 1).padding(.leading, 52) }
             }
         }.background(OTColor.background, in: RoundedRectangle(cornerRadius: 16))
