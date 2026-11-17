@@ -53,6 +53,14 @@ describe("resolveContentScriptAssetUrl", () => {
     expect(sendMessageMock).not.toHaveBeenCalled()
   })
 
+  it("does not proxy remote assets on file:// app pages", async () => {
+    const { resolveContentScriptAssetBlob, shouldProxyAssetUrl } = await import("../background-asset-url")
+
+    expect(shouldProxyAssetUrl("https://cdn.example.com/logo.webp", "file:///app/settings.html")).toBe(false)
+    await expect(resolveContentScriptAssetBlob("https://cdn.example.com/logo.webp", "file:///app/settings.html")).resolves.toBeNull()
+    expect(sendMessageMock).not.toHaveBeenCalled()
+  })
+
   it("deduplicates concurrent requests for the same asset URL", async () => {
     let resolveFetch:
       | ((value: {

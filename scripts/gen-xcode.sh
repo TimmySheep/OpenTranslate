@@ -16,7 +16,7 @@ mkdir -p "$REPO_ROOT/apple"
 xcrun safari-web-extension-converter \
   --project-location "$REPO_ROOT/apple" \
   --app-name OpenTranslate \
-  --bundle-identifier com.mekedron.OpenTranslate \
+  --bundle-identifier net.timhuang.opentranslate \
   --swift --copy-resources --no-open --no-prompt --force \
   "$SRC"
 echo "✓ Generated → $REPO_ROOT/apple/OpenTranslate (commit it, then never --force again)"

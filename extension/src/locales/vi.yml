@@ -1,6 +1,6 @@
 name: OpenTranslate
 extName: OpenTranslate
-extDescription: OpenTranslate là tiện ích mở rộng trình duyệt mã nguồn mở được thiết kế để giúp bạn học ngôn ngữ sâu từ bất kỳ trang web nào.
+extDescription: Tiện ích trình duyệt mã nguồn mở giúp đọc và học ngôn ngữ trên mọi trang web.
 uninstallSurveyUrl: https://tally.so/r/nPK6Ob
 dataTypes:
   string: Văn bản

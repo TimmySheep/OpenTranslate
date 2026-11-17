@@ -1,8 +1,38 @@
+import type { Plugin } from "vite"
+import { readdir } from "node:fs/promises"
+import path from "node:path"
 import process from "node:process"
+import { fileURLToPath } from "node:url"
+import { generateChromeMessages, parseMessagesFile } from "@wxt-dev/i18n/build"
 import { defineConfig } from "wxt"
 
 const WXT_API_KEY_PATTERN = /^WXT_.*API_KEY/
 const ALLOWED_BUNDLED_API_KEYS = new Set<string>()
+const VIRTUAL_TRANSLATE_APP_LOCALES = "virtual:translate-app-locales"
+const extensionRoot = path.dirname(fileURLToPath(import.meta.url))
+const localesDir = path.join(extensionRoot, "src/locales")
+
+function translateAppLocalesPlugin(): Plugin {
+  return {
+    name: "translate-app-locales",
+    resolveId(id) {
+      if (id === VIRTUAL_TRANSLATE_APP_LOCALES)
+        return `\0${VIRTUAL_TRANSLATE_APP_LOCALES}`
+    },
+    async load(id) {
+      if (id !== `\0${VIRTUAL_TRANSLATE_APP_LOCALES}`)
+        return
+      const catalog: Record<string, unknown> = {}
+      for (const file of await readdir(localesDir)) {
+        if (!file.endsWith(".yml") && !file.endsWith(".yaml"))
+          continue
+        const locale = file.replace(/\.ya?ml$/, "").replaceAll("-", "_")
+        catalog[locale] = generateChromeMessages(await parseMessagesFile(path.join(localesDir, file)))
+      }
+      return `export const defaultLocale = "en"\nexport const catalog = ${JSON.stringify(catalog)}\n`
+    },
+  }
+}
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
@@ -72,7 +102,7 @@ export default defineConfig({
       // Safari uses activeTab (its per-site permission model) so the toolbar
       // action works. Other browsers get offscreen/sidePanel (absent on Firefox).
       ...(browser === "safari"
-        ? ["activeTab"]
+        ? ["activeTab", "nativeMessaging"]
         : (browser !== "firefox" ? ["offscreen", "sidePanel"] : [])),
     ],
     host_permissions: [
@@ -124,6 +154,7 @@ export default defineConfig({
   },
   vite: configEnv => ({
     plugins: [
+      translateAppLocalesPlugin(),
       ...(configEnv.mode === "production"
         ? [
             {

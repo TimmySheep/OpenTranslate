@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/base-ui/input"
 import { requestQueueConfigSchema } from "@/types/config/translate"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
 import { MIN_TRANSLATE_CAPACITY, MIN_TRANSLATE_RATE } from "@/utils/constants/translate"
+import { isAppSettingsMode } from "@/utils/app-settings-mode"
 import { sendMessage } from "@/utils/message"
 import { ConfigCard } from "../../components/config-card"
 
@@ -84,9 +85,11 @@ function TranslateNumberSelector({ property }: { property: KeyOfRequestQueueConf
                 [property]: newConfigValue,
               },
             })
-            void sendMessage("setTranslateRequestQueueConfig", {
-              [property]: newConfigValue,
-            })
+            if (!isAppSettingsMode()) {
+              void sendMessage("setTranslateRequestQueueConfig", {
+                [property]: newConfigValue,
+              })
+            }
           }
           else {
             toast.error(configParseResult.error?.issues[0].message)

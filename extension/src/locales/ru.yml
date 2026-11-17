@@ -1,6 +1,6 @@
 name: OpenTranslate
 extName: OpenTranslate
-extDescription: OpenTranslate — расширение браузера с открытым исходным кодом, которое поможет вам глубоко изучать языки на любом веб-сайте.
+extDescription: Расширение браузера с открытым кодом для чтения и изучения языков на любом сайте.
 uninstallSurveyUrl: https://tally.so/r/nPK6Ob
 dataTypes:
   string: Текст

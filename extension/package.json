@@ -9,6 +9,7 @@
   "scripts": {
     "build": "wxt build",
     "build:safari": "WXT_SKIP_ENV_VALIDATION=true wxt build -b safari",
+    "build:options-app": "WXT_SKIP_ENV_VALIDATION=true wxt build -b safari -c wxt.options-app.config.ts",
     "build:analyze": "WXT_SKIP_ENV_VALIDATION=true wxt build -b safari --analyze",
     "dev": "wxt",
     "dev:safari": "WXT_SKIP_ENV_VALIDATION=true wxt -b safari",

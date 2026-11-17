@@ -1,6 +1,6 @@
 name: OpenTranslate
 extName: OpenTranslate
-extDescription: OpenTranslate translates web pages and selected text in Safari, with many translation providers (Google, Microsoft, DeepL, OpenAI, and more).
+extDescription: Translate web pages and selected text as you read, with many providers (Google, Microsoft, DeepL, OpenAI, more).
 uninstallSurveyUrl: https://tally.so/r/nPK6Ob
 dataTypes:
   string: Text

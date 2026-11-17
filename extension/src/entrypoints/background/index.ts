@@ -15,6 +15,7 @@ import { initMockData } from "./mock-data"
 import { proxyFetch } from "./proxy-fetch"
 import { setUpWebPageTranslationQueue } from "./translation-queues"
 import { translationMessage } from "./translation-signal"
+import { syncSharedSettingsWithAppGroup } from "@/utils/safari-shared-settings"
 
 export default defineBackground({
   type: "module",
@@ -59,6 +60,17 @@ export default defineBackground({
     void setUpWebPageTranslationQueue()
     void setUpDatabaseCleanup()
     setUpConfigBackup()
+
+    // Same-device App Group sync (Safari only; no-op elsewhere).
+    void ensureInitializedConfig().then(async () => {
+      try {
+        const outcome = await syncSharedSettingsWithAppGroup()
+        logger.info("safari shared settings sync", outcome)
+      }
+      catch (error) {
+        logger.warn("safari shared settings sync failed", error)
+      }
+    })
 
     proxyFetch()
     setupLLMGenerateTextMessageHandlers()

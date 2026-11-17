@@ -1,13 +1,14 @@
 import type { Config } from "@/types/config/config"
 import type { ConfigMeta, ConfigValueAndMeta } from "@/types/config/meta"
-import { storage } from "#imports"
 import { configSchema } from "@/types/config/config"
+import { z } from "zod"
 import { CONFIG_SCHEMA_VERSION, CONFIG_STORAGE_KEY, DEFAULT_CONFIG } from "../constants/config"
 import { logger } from "../logger"
+import { storageAdapter } from "../atoms/storage-adapter"
 
 export async function getLocalConfig() {
-  const config = await storage.getItem<Config>(`local:${CONFIG_STORAGE_KEY}`)
-  if (!config) {
+  const config = await storageAdapter.get<Config | null>(CONFIG_STORAGE_KEY, null, z.custom<Config | null>(value => value === null || typeof value === "object"))
+  if (config === null) {
     logger.warn("No config found in storage")
     return null
   }
@@ -24,15 +25,15 @@ export async function setLocalConfig(config: Config) {
   if (!parsedConfig.success) {
     throw new Error("Config is invalid")
   }
-  await storage.setItem<Config>(`local:${CONFIG_STORAGE_KEY}`, parsedConfig.data)
-  await storage.setMeta<Partial<ConfigMeta>>(`local:${CONFIG_STORAGE_KEY}`, { lastModifiedAt: Date.now() })
+  await storageAdapter.set(CONFIG_STORAGE_KEY, parsedConfig.data, configSchema)
+  await storageAdapter.setMeta(CONFIG_STORAGE_KEY, { lastModifiedAt: Date.now() })
 }
 
 export async function getLocalConfigAndMeta(): Promise<ConfigValueAndMeta> {
   try {
     const [config, meta] = await Promise.all([
-      storage.getItem<Config>(`local:${CONFIG_STORAGE_KEY}`),
-      storage.getMeta<ConfigMeta>(`local:${CONFIG_STORAGE_KEY}`),
+      storageAdapter.get<Config | null>(CONFIG_STORAGE_KEY, null, configSchema.nullable()),
+      storageAdapter.getMeta<ConfigMeta>(CONFIG_STORAGE_KEY),
     ])
 
     if (!config) {
@@ -64,6 +65,6 @@ export async function setLocalConfigAndMeta(config: Config, meta: Partial<Config
   if (!parsedConfig.success) {
     throw new Error("Config is invalid")
   }
-  await storage.setItem<Config>(`local:${CONFIG_STORAGE_KEY}`, parsedConfig.data)
-  await storage.setMeta<Partial<ConfigMeta>>(`local:${CONFIG_STORAGE_KEY}`, { ...meta, lastModifiedAt })
+  await storageAdapter.set(CONFIG_STORAGE_KEY, parsedConfig.data, configSchema)
+  await storageAdapter.setMeta(CONFIG_STORAGE_KEY, { ...meta, lastModifiedAt })
 }

@@ -24,9 +24,10 @@ import { createXai } from "@ai-sdk/xai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { createOllama } from "ollama-ai-provider-v2"
 import { createMinimax } from "vercel-minimax-ai-provider"
-import { storage } from "#imports"
+import { z } from "zod"
 import { DEFAULT_AZURE_API_MODE, isCustomLLMProvider } from "@/types/config/provider"
 import { compactObject } from "@/types/utils"
+import { storageAdapter } from "../atoms/storage-adapter"
 import { getLLMProvidersConfig, getProviderConfigById } from "../config/helpers"
 import { CONFIG_STORAGE_KEY } from "../constants/config"
 import { getProviderHeadersWithOverride } from "./headers"
@@ -84,8 +85,8 @@ function getAzureApiMode(providerConfig: LLMProviderConfig): AzureApiMode {
   return apiMode === "chat" ? "chat" : DEFAULT_AZURE_API_MODE
 }
 
-async function getLanguageModelById(providerId: string) {
-  const config = await storage.getItem<Config>(`local:${CONFIG_STORAGE_KEY}`)
+async function getLanguageModelById(providerId: string, transport?: typeof fetch) {
+  const config = await storageAdapter.get<Config | null>(CONFIG_STORAGE_KEY, null, z.custom<Config | null>(() => true))
   if (!config) {
     throw new Error("Config not found")
   }
@@ -107,12 +108,14 @@ async function getLanguageModelById(providerId: string) {
         supportsStructuredOutputs: true,
         ...(providerConfig.apiKey && { apiKey: providerConfig.apiKey }),
         ...(headers && { headers }),
+        ...(transport && { fetch: transport }),
       })
     : CREATE_AI_MAPPER[providerConfig.provider]({
         ...providerSpecificSettings,
         ...(providerConfig.baseURL && { baseURL: providerConfig.baseURL }),
         ...(providerConfig.apiKey && { apiKey: providerConfig.apiKey }),
         ...(headers && { headers }),
+        ...(transport && { fetch: transport }),
       })
 
   const modelId = resolveModelId(providerConfig.model)
@@ -128,6 +131,6 @@ async function getLanguageModelById(providerId: string) {
   return provider.languageModel(modelId)
 }
 
-export async function getModelById(providerId: string) {
-  return getLanguageModelById(providerId)
+export async function getModelById(providerId: string, transport?: typeof fetch) {
+  return getLanguageModelById(providerId, transport)
 }

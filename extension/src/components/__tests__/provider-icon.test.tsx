@@ -91,4 +91,14 @@ describe("provider icon", () => {
     view.unmount()
     expect(bitmap.close).toHaveBeenCalledTimes(1)
   })
+
+  it("renders an uppercase initial when a remote logo fails to load", async () => {
+    shouldProxyAssetUrlMock.mockReturnValue(false)
+    const { default: ProviderIcon } = await import("../provider-icon")
+
+    render(<ProviderIcon logo="https://cdn.example.com/logo.webp" name="openai" size="md" />)
+    screen.getByRole("img", { name: "openai" }).dispatchEvent(new Event("error"))
+
+    expect(await screen.findByText("O")).toBeInTheDocument()
+  })
 })

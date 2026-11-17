@@ -3,18 +3,28 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
-
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-
     <link rel="stylesheet" href="../Style.css">
     <script src="../Script.js" defer></script>
 </head>
 <body>
     <img src="../Icon.png" width="128" height="128" alt="OpenTranslate Icon">
-    <p class="platform-ios">You can turn on OpenTranslate’s Safari extension in Settings.</p>
-    <p class="platform-mac state-unknown">You can turn on OpenTranslate’s extension in Safari Extensions preferences.</p>
-    <p class="platform-mac state-on">OpenTranslate’s extension is currently on. You can turn it off in Safari Extensions preferences.</p>
-    <p class="platform-mac state-off">OpenTranslate’s extension is currently off. You can turn it on in Safari Extensions preferences.</p>
-    <button class="platform-mac open-preferences">Quit and Open Safari Extensions Preferences…</button>
+    <p class="platform-ios">You can turn on OpenTranslate’s browser extension in Settings.</p>
+    <p class="platform-mac state-unknown">You can turn on OpenTranslate’s extension in your browser’s extension settings.</p>
+    <p class="platform-mac state-on">OpenTranslate’s extension is currently on. You can turn it off in your browser’s extension settings.</p>
+    <p class="platform-mac state-off">OpenTranslate’s extension is currently off. You can turn it on in your browser’s extension settings.</p>
+    <button class="platform-mac open-preferences">Quit and Open Extension Settings…</button>
+
+    <section class="shared-settings" aria-label="Shared settings">
+        <h2>Shared settings (this device)</h2>
+        <p id="shared-status">Checking App Group…</p>
+        <label for="target-language">Default target language code</label>
+        <div class="row">
+            <input id="target-language" type="text" maxlength="16" placeholder="e.g. zho, jpn, eng" autocomplete="off">
+            <button id="save-target" type="button">Save to shared settings</button>
+        </div>
+        <p class="hint">Saving here updates the App Group store. The extension picks it up on next sync (startup or after its own save). Full provider/API settings remain in the extension options UI.</p>
+        <button id="refresh-shared" type="button">Refresh status</button>
+    </section>
 </body>
 </html>
