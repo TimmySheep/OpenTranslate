@@ -122,11 +122,12 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
 #if os(macOS)
     override func viewDidAppear() {
         super.viewDidAppear()
-        guard isShowingSettingsPage, let window = view.window else { return }
+        guard let window = view.window else { return }
         window.styleMask.insert(.resizable)
-        window.minSize = NSSize(width: 800, height: 560)
-        if window.frame.width < 800 || window.frame.height < 560 {
-            window.setContentSize(NSSize(width: 1100, height: 740))
+        window.title = "OpenTranslate"
+        window.contentMinSize = NSSize(width: 720, height: 520)
+        if isShowingSettingsPage && (window.frame.width < 720 || window.frame.height < 520) {
+            window.setContentSize(NSSize(width: 900, height: 680))
         }
     }
 #endif

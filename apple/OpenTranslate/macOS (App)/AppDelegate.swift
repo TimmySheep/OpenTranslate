@@ -11,7 +11,11 @@ import Cocoa
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Override point for customization after application launch.
+        NSApp.windows.forEach { window in
+            window.title = "OpenTranslate"
+            window.styleMask.insert(.resizable)
+            window.contentMinSize = NSSize(width: 720, height: 520)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

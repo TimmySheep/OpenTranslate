@@ -2,8 +2,11 @@ import SwiftUI
 import AVFoundation
 import WebKit
 import Combine
+import PDFKit
+import UniformTypeIdentifiers
 #if os(iOS)
 import UIKit
+import PhotosUI
 #elseif os(macOS)
 import AppKit
 #endif
@@ -48,6 +51,8 @@ private struct ChatCompletionResponse: Decodable {
     let choices: [Choice]
 }
 
+private enum TranslateMode: String, CaseIterable { case text = "文字", image = "图片", document = "文档" }
+
 private struct NativeProvider: Identifiable, Hashable {
     let id: String
     let name: String
@@ -77,6 +82,7 @@ private struct NativeProvider: Identifiable, Hashable {
     @Published var providerName = ""
     @Published var error: String?
     @Published var isLoading = false
+    @Published var mode: TranslateMode = .text
     @Published var hasKey = false
     @Published var targetCode = "cmn"
     @Published var sourceCode = "auto"
@@ -134,8 +140,13 @@ private struct NativeProvider: Identifiable, Hashable {
     }
 
     func translate() async {
+        await translate(imageData: nil)
+    }
+
+    func translate(imageData: Data?) async {
         error = nil
-        guard let text = Optional(input.trimmingCharacters(in: .whitespacesAndNewlines)), !text.isEmpty else { error = "请输入要翻译的文字。"; return }
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if imageData == nil && text.isEmpty { error = "请输入要翻译的文字。"; return }
         guard let envelope = SharedSettingsStore.shared.readEnvelope() else { error = "添加 AI 提供商后即可翻译。"; return }
         let cfg = envelope.config
         let providers = cfg["providersConfig"] as? [[String: Any]] ?? []
@@ -149,13 +160,21 @@ private struct NativeProvider: Identifiable, Hashable {
         let modelObject = item["model"] as? [String: Any] ?? [:]
         let model = (modelObject["customModel"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? (modelObject["model"] as? String ?? provider.defaultModel)
         guard !model.isEmpty else { error = "请在设置中填写模型名。"; return }
+        if imageData != nil && !Self.supportsVision(model) {
+            error = "当前模型 \(model) 不支持图片输入，请在设置里换用多模态模型"; return
+        }
         let languageName = Self.languageName(targetCode)
-        let system = "你是专业翻译助手。将用户输入翻译为\(languageName)。只返回合法 JSON，不要 Markdown 或额外文字。结构：{\"translation\":\"主译文\",\"partOfSpeech\":\"词性或空\",\"ipa\":\"音标或空\",\"alternatives\":[{\"text\":\"其他译法\",\"note\":\"使用场景\"}],\"examples\":[{\"source\":\"原句\",\"target\":\"译文\"}],\"definitions\":[\"简短释义\"]}。"
+        let system = "你是专业翻译助手。\(imageData == nil ? "将用户输入" : "识别图片中文字并将其")翻译为\(languageName)。只返回合法 JSON，不要 Markdown 或额外文字。结构：{\"translation\":\"主译文\",\"partOfSpeech\":\"词性或空\",\"ipa\":\"音标或空\",\"alternatives\":[{\"text\":\"其他译法\",\"note\":\"使用场景\"}],\"examples\":[{\"source\":\"原句\",\"target\":\"译文\"}],\"definitions\":[\"简短释义\"]}。"
         var request = URLRequest(url: url, timeoutInterval: 45)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["model": model, "messages": [["role": "system", "content": system], ["role": "user", "content": text]], "temperature": 0.2])
+        let userContent: Any
+        if let imageData {
+            userContent = [["type": "text", "text": system], ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(imageData.base64EncodedString())"]]]
+        } else { userContent = text }
+        let messages: [[String: Any]] = imageData == nil ? [["role": "system", "content": system], ["role": "user", "content": userContent]] : [["role": "user", "content": userContent]]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["model": model, "messages": messages, "temperature": 0.2])
         isLoading = true
         defer { isLoading = false }
         do {
@@ -184,6 +203,42 @@ private struct NativeProvider: Identifiable, Hashable {
         #endif
     }
     private static func languageName(_ code: String) -> String { languages.first(where: { $0.0 == code })?.1 ?? code }
+    private static func supportsVision(_ model: String) -> Bool {
+        let name = model.lowercased().split(separator: "/").last.map(String.init) ?? model.lowercased()
+        return name.hasPrefix("gpt-4o") || name.hasPrefix("gpt-4.1") || name.hasPrefix("gpt-5") || name == "o3" || name.hasPrefix("o4") || name.hasPrefix("gemini") || name.hasPrefix("claude-3") || name.hasPrefix("claude-4") || name.hasPrefix("deepseek-vl")
+    }
+    func translatePDF(url: URL) {
+        guard url.startAccessingSecurityScopedResource() else { error = "无法读取所选 PDF。"; return }
+        defer { url.stopAccessingSecurityScopedResource() }
+        guard let pdf = PDFDocument(url: url) else { error = "无法打开所选 PDF。"; return }
+        let limit = min(pdf.pageCount, 10)
+        let text = (0..<limit).compactMap { pdf.page(at: $0)?.string }.filter { !$0.isEmpty }.joined(separator: "\n")
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { error = "这是扫描版 PDF，请改用图片翻译"; return }
+        input = text
+        if pdf.pageCount > 10 { error = "长文档建议分段（本次仅翻译前 10 页）" }
+        Task {
+            await translate()
+            if pdf.pageCount > 10 { error = "长文档建议分段（本次仅翻译前 10 页）" }
+        }
+    }
+    func translateImage(_ data: Data) {
+        #if os(iOS)
+        guard let image = UIImage(data: data), let resized = image.resized(maxDimension: 1536), let jpeg = resized.jpegData(compressionQuality: 0.82) else { error = "无法读取所选图片。"; return }
+        Task { await translate(imageData: jpeg) }
+        #elseif os(macOS)
+        guard let image = NSImage(data: data) else { error = "无法读取所选图片。"; return }
+        let ratio = min(1, 1536 / max(image.size.width, image.size.height))
+        let size = NSSize(width: image.size.width * ratio, height: image.size.height * ratio)
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: max(1, Int(size.width)), pixelsHigh: max(1, Int(size.height)), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0), let context = NSGraphicsContext(bitmapImageRep: bitmap) else { error = "无法压缩所选图片。"; return }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        image.draw(in: NSRect(origin: .zero, size: size), from: .zero, operation: .copy, fraction: 1)
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        guard let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.82]) else { error = "无法编码所选图片。"; return }
+        Task { await translate(imageData: jpeg) }
+        #endif
+    }
     private static func bcp47(_ code: String) -> String { ["cmn": "zh-CN", "eng": "en-US", "jpn": "ja-JP", "kor": "ko-KR", "fra": "fr-FR", "deu": "de-DE", "spa": "es-ES", "ita": "it-IT", "rus": "ru-RU"][code] ?? code }
 }
 
@@ -197,8 +252,11 @@ struct TranslateScreen: View {
     @State private var showingTargetLanguages = false
     @State private var showingSwapNotice = false
     @State private var showingCameraNotice = false
+    @State private var showingPDFImporter = false
     #if os(iOS)
     @State private var pasteAvailable = false
+    @State private var showingUploadMenu = false
+    @State private var showingPhotoPicker = false
     #endif
     @State private var sourceDrag: CGFloat = 0
     @State private var targetDrag: CGFloat = 0
@@ -211,11 +269,23 @@ struct TranslateScreen: View {
         GeometryReader { geometry in
             let wide = geometry.size.width >= 700
             ZStack {
+                #if os(macOS)
+                Color(hex: systemScheme == .dark ? "131314" : "FFFFFF").ignoresSafeArea()
+                #else
                 OTColor.background.ignoresSafeArea()
+                #endif
                 VStack(spacing: 0) {
                     header.padding(.horizontal, 24).padding(.top, 8)
                     if !model.hasKey { Button { showingSettings = true } label: { Label("添加 AI 提供商后即可翻译", systemImage: "key.fill").frame(maxWidth: .infinity, alignment: .leading).padding(12) }.buttonStyle(.plain).padding(.horizontal, 24).padding(.top, 12) }
                     if let error = model.error { Text(error).font(.callout).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading).padding(12).padding(.horizontal, 24) }
+                    #if os(macOS)
+                    modeTabs.padding(.horizontal, 24).padding(.top, 16)
+                    languageBar.padding(.horizontal, 24).padding(.top, 12)
+                    HStack(alignment: .top, spacing: 16) {
+                        macInputCard.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        macOutputCard.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }.padding(.horizontal, 24).padding(.top, 12).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    #else
                     if wide {
                         HStack(alignment: .top, spacing: 24) {
                             inputArea.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -227,6 +297,7 @@ struct TranslateScreen: View {
                         languageBar.padding(.horizontal, 24)
                         actionBar.padding(.horizontal, 24).padding(.top, 28).padding(.bottom, 20)
                     }
+                    #endif
                 }
             }
         }
@@ -236,10 +307,70 @@ struct TranslateScreen: View {
         .alert("语音输入将在后续版本启用", isPresented: $showingVoiceNotice) { Button("好", role: .cancel) {} }
         .alert("拍照翻译将在后续版本启用", isPresented: $showingCameraNotice) { Button("好", role: .cancel) {} }
         .alert("无法交换语言", isPresented: $showingSwapNotice) { Button("好", role: .cancel) {} } message: { Text("源语言为自动检测时，请先选择具体源语言再交换。") }
+        #if os(iOS)
+        .confirmationDialog("上传", isPresented: $showingUploadMenu, titleVisibility: .visible) {
+            Button("从照片选择") { showingPhotoPicker = true }
+            Button("选择文档") { showingPDFImporter = true }
+        }
+        .sheet(isPresented: $showingPhotoPicker) {
+            if #available(iOS 16.0, *) { NativePhotosPicker { model.translateImage($0) } }
+            else { Text("照片选择需要 iOS 16 或更新版本。") }
+        }
+        #endif
+        .fileImporter(isPresented: $showingPDFImporter, allowedContentTypes: model.mode == .image ? [.image] : [.pdf], allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                if model.mode == .image {
+                    let accessGranted = url.startAccessingSecurityScopedResource()
+                    defer { if accessGranted { url.stopAccessingSecurityScopedResource() } }
+                    if let data = try? Data(contentsOf: url) { model.translateImage(data) }
+                    else { model.error = "无法读取所选图片。" }
+                } else { model.translatePDF(url: url) }
+            }
+            else if case .failure(let error) = result { model.error = error.localizedDescription }
+        }
         .onChange(of: editing) { active in if active { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { editorFocused = true } } }
         .onAppear { model.reload(); refreshPasteboard() }
         .preferredColorScheme(themePreference == "light" ? .light : (themePreference == "dark" ? .dark : nil))
     }
+
+    #if os(macOS)
+    private var modeTabs: some View {
+        HStack(spacing: 8) {
+            ForEach(TranslateMode.allCases, id: \.self) { mode in
+                Button { model.mode = mode } label: {
+                    Text(mode.rawValue).font(.system(size: 13, weight: .medium)).foregroundStyle(model.mode == mode ? Color(hex: systemScheme == .dark ? "AEC6F5" : "0B57D0") : Color(hex: systemScheme == .dark ? "9AA0A6" : "5F6368"))
+                        .padding(.horizontal, 16).frame(height: 36).background(model.mode == mode ? Color(hex: systemScheme == .dark ? "1D4973" : "D3E3FD") : .clear, in: Capsule())
+                        .overlay(Capsule().stroke(model.mode == mode ? .clear : Color(hex: "747775"), lineWidth: 1))
+                }.buttonStyle(.plain)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private var macInputCard: some View {
+        VStack(alignment: .leading) {
+            if model.mode == .text {
+                if editing {
+                    HStack { Button("取消") { draft = model.input; editing = false }; Spacer(); Button("完成") { model.input = draft; editing = false; if model.hasKey { Task { await model.translate() } } } }
+                    editorView
+                } else {
+                    Text(model.input.isEmpty ? "输入文字" : model.input).font(.system(size: model.input.isEmpty ? 20 : 18)).foregroundStyle(Color(hex: model.input.isEmpty ? (systemScheme == .dark ? "9AA0A6" : "5F6368") : (systemScheme == .dark ? "E8EAED" : "202124"))).onTapGesture { draft = model.input; editing = true }
+                }
+            } else {
+                Text(model.mode == .image ? "选择图片后翻译" : "选择 PDF 文档翻译").font(.system(size: 20)).foregroundStyle(Color(hex: systemScheme == .dark ? "9AA0A6" : "5F6368"))
+            }
+            Spacer(minLength: 0)
+            if model.mode != .text {
+                Button(model.mode == .image ? "选择图片" : "选择 PDF") { showingPDFImporter = true }.buttonStyle(.bordered)
+            } else if !model.input.isEmpty { Button("翻译") { Task { await model.translate() } }.buttonStyle(.borderedProminent) }
+        }.padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(hex: systemScheme == .dark ? "131314" : "FFFFFF"), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: systemScheme == .dark ? "3C4043" : "E0E0E0"), lineWidth: 1))
+    }
+    private var macOutputCard: some View {
+        Group { if let result = model.result?.translation { Text(result).font(.system(size: 20)).foregroundStyle(Color(hex: systemScheme == .dark ? "E8EAED" : "202124")).textSelection(.enabled) } else { Text("翻译").font(.system(size: 20)).foregroundStyle(Color(hex: systemScheme == .dark ? "9AA0A6" : "5F6368")) } }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(16)
+            .background(Color(hex: systemScheme == .dark ? "1F1F21" : "F5F7F9"), in: RoundedRectangle(cornerRadius: 8))
+    }
+    #endif
 
     private var header: some View {
         HStack {
@@ -282,11 +413,18 @@ struct TranslateScreen: View {
             languagePill(source: true).background(GeometryReader { proxy in Color.clear.onAppear { sourceWidth = proxy.size.width } }).offset(x: sourceDrag)
             Button { swapLanguages() } label: { Image(systemName: "arrow.left.arrow.right").font(.system(size: 18)).foregroundStyle(OTColor.secondary).frame(width: 44, height: 44) }.buttonStyle(PressScaleStyle()).accessibilityLabel("交换语言")
             languagePill(source: false).offset(x: targetDrag)
-        }.font(.system(size: 14))
+        }.font(.system(size: 13))
     }
     private func languagePill(source: Bool) -> some View {
         Button { if source { showingSourceLanguages = true } else { showingTargetLanguages = true } } label: {
+            #if os(macOS)
+            VStack(spacing: 0) {
+                Text(languageName(source ? model.sourceCode : model.targetCode)).foregroundStyle(Color(hex: systemScheme == .dark ? "E8EAED" : "202124")).frame(maxWidth: .infinity).frame(height: 42).padding(.horizontal, 8)
+                Rectangle().fill(Color(hex: systemScheme == .dark ? "AEC6F5" : "0B57D0")).frame(height: 2)
+            }.frame(maxWidth: .infinity).frame(height: 44)
+            #else
             Text(languageName(source ? model.sourceCode : model.targetCode)).foregroundStyle(OTColor.primary).frame(maxWidth: .infinity).frame(height: 44).padding(.horizontal, 8).background(OTColor.panel, in: RoundedRectangle(cornerRadius: 12))
+            #endif
         }.buttonStyle(.plain).accessibilityLabel(source ? "源语言" : "目标语言")
             .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { value in if source { sourceDrag = value.translation.width } else { targetDrag = value.translation.width } }.onEnded { value in
                 let threshold = sourceWidth * 0.5
@@ -301,7 +439,11 @@ struct TranslateScreen: View {
     }
     private var actionBar: some View {
         HStack(spacing: 0) {
+            #if os(iOS)
+            Button { showingUploadMenu = true } label: { Image(systemName: "plus").font(.system(size: 18, weight: .medium)).foregroundStyle(.white).frame(width: 44, height: 44).background(Color(hex: "1D4973"), in: Circle()) }.buttonStyle(PressScaleStyle()).frame(maxWidth: .infinity).accessibilityLabel("上传")
+            #else
             Color.clear.frame(maxWidth: .infinity)
+            #endif
             Button { showingVoiceNotice = true } label: { Image(systemName: "mic.fill").font(.system(size: 28)).foregroundStyle(OTColor.background).frame(width: 70, height: 70).background(OTColor.mic, in: Circle()) }.buttonStyle(PressScaleStyle()).frame(maxWidth: .infinity)
             Button { showingCameraNotice = true } label: { Image(systemName: "camera.viewfinder").font(.system(size: 18)).foregroundStyle(.white).frame(width: 44, height: 44).background(OTColor.blue, in: Circle()) }.buttonStyle(PressScaleStyle()).frame(maxWidth: .infinity)
         }
@@ -337,6 +479,42 @@ struct TranslateScreen: View {
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View { VStack(alignment: .leading, spacing: 8) { Text(title).font(.headline); content() } }
     private func languageName(_ code: String) -> String { code == "auto" ? "自动检测" : (TranslateModel.languages.first(where: { $0.0 == code })?.1 ?? code) }
 }
+
+private extension Color {
+    init(hex: String) {
+        let value = UInt64(hex, radix: 16) ?? 0
+        self.init(red: Double((value >> 16) & 0xff) / 255, green: Double((value >> 8) & 0xff) / 255, blue: Double(value & 0xff) / 255)
+    }
+}
+
+#if os(iOS)
+@available(iOS 16.0, *)
+private struct NativePhotosPicker: View {
+    let onSelect: (Data) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection: PhotosPickerItem?
+    var body: some View {
+        PhotosPicker("从照片选择", selection: $selection, matching: .images).padding(24)
+            .onChange(of: selection) { item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self) { onSelect(data) }
+                    dismiss()
+                }
+            }
+    }
+}
+
+private extension UIImage {
+    func resized(maxDimension: CGFloat) -> UIImage? {
+        let longest = max(size.width, size.height)
+        guard longest > maxDimension else { return self }
+        let scale = maxDimension / longest
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        return UIGraphicsImageRenderer(size: newSize).image { _ in draw(in: CGRect(origin: .zero, size: newSize)) }
+    }
+}
+#endif
 
 private struct PressScaleStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -473,7 +651,7 @@ private struct OptionsWebView: View {
                 Text("找不到完整设置页面").padding()
             }
         }
-        .frame(minWidth: 320, minHeight: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
