@@ -51,6 +51,30 @@ private struct ChatCompletionResponse: Decodable {
     let choices: [Choice]
 }
 
+private enum ModelDirectory {
+    static func requestURL(baseURL: String) -> URL? {
+        let normalized = baseURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return URL(string: normalized + "/models")
+    }
+
+    static func parse(_ data: Data) throws -> [String] {
+        let json = try JSONSerialization.jsonObject(with: data)
+        let values: [Any]
+        if let object = json as? [String: Any], let entries = object["data"] as? [Any] {
+            values = entries
+        } else if let entries = json as? [Any] {
+            values = entries
+        } else {
+            throw NSError(domain: "ModelDirectory", code: 0, userInfo: [NSLocalizedDescriptionKey: "模型列表响应格式无效。"])
+        }
+        return Array(Set(values.compactMap { ($0 as? [String: Any])?["id"] as? String }.filter { !$0.isEmpty })).sorted()
+    }
+
+    static func cacheKey(baseURL: String, apiKey: String) -> String {
+        "opentranslate.models.\(baseURL).\(String(apiKey.prefix(8)))"
+    }
+}
+
 private enum TranslateMode: String, CaseIterable { case text = "文字", image = "图片", document = "文档" }
 
 private struct NativeProvider: Identifiable, Hashable {
@@ -607,6 +631,13 @@ private struct NativeSettingsSheet: View {
     @State private var theme = "system"
     @State private var saveError: String?
     @State private var showingFullSettings = false
+    @State private var showingModels = false
+    @State private var modelSearch = ""
+    @State private var availableModels: [String] = []
+    @State private var isFetchingModels = false
+    @State private var modelFetchError: String?
+    private var modelCacheKey: String { ModelDirectory.cacheKey(baseURL: selected.id == "openai-compatible" ? baseURL : selected.baseURL, apiKey: apiKey) }
+    private var filteredModels: [String] { availableModels.filter { modelSearch.isEmpty || $0.localizedCaseInsensitiveContains(modelSearch) } }
     private var selected: NativeProvider { NativeProvider.all.first(where: { $0.id == selectedID }) ?? NativeProvider.all[0] }
     var body: some View {
         NavigationView {
@@ -614,7 +645,13 @@ private struct NativeSettingsSheet: View {
                 Section("翻译提供商") {
                     Picker("提供商", selection: $selectedID) { ForEach(NativeProvider.all) { provider in Text(provider.name + (hasKey(provider.id) ? " · 已配置 Key" : " · 未配置 Key")).tag(provider.id) } }.onChange(of: selectedID) { _ in loadProvider() }
                     SecureField("API Key", text: $apiKey).textContentType(.password)
-                    TextField("模型名", text: $modelName)
+                    HStack {
+                        TextField("模型名", text: $modelName)
+                        Button("获取列表") { openModelList() }
+                            .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (selected.id == "openai-compatible" && baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || isFetchingModels)
+                    }
+                    if isFetchingModels { ProgressView("正在获取模型列表…") }
+                    if let modelFetchError { Text(modelFetchError).foregroundStyle(.red) }
                     if selected.id == "openai-compatible" { TextField("API Base URL", text: $baseURL) }
                 }
                 Section("偏好") {
@@ -628,9 +665,38 @@ private struct NativeSettingsSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("保存") { save() } } }
         }
         .sheet(isPresented: $showingFullSettings) { OptionsWebView() }
+        .sheet(isPresented: $showingModels) {
+            NavigationView {
+                List(filteredModels, id: \.self) { modelID in
+                    Button {
+                        modelName = modelID
+                        showingModels = false
+                    } label: {
+                        HStack {
+                            Text(modelID).font(.system(.body, design: .monospaced))
+                            Spacer()
+                            if modelID == modelName { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }
+                    }.foregroundStyle(.primary)
+                }
+                .searchable(text: $modelSearch, prompt: "搜索模型")
+                .navigationTitle("选择模型")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("刷新") { Task { await fetchModels() } }.disabled(isFetchingModels) }
+                    ToolbarItem(placement: .confirmationAction) { Button("完成") { showingModels = false } }
+                }
+            }
+            .modifier(LargeSheetDetent())
+        }
         .onAppear { selectedID = model.providerId; target = model.targetCode; theme = UserDefaults.standard.string(forKey: nativeThemeKey) ?? "system"; loadProvider() }
     }
     private func hasKey(_ id: String) -> Bool { let list = model.config["providersConfig"] as? [[String: Any]] ?? []; return list.contains { ($0["provider"] as? String) == id && !(($0["apiKey"] as? String ?? "").isEmpty) } }
+    private func openModelList() {
+        modelFetchError = nil
+        availableModels = UserDefaults.standard.stringArray(forKey: modelCacheKey) ?? []
+        if availableModels.isEmpty { Task { await fetchModels() } }
+        else { showingModels = true }
+    }
     private func loadProvider() {
         let list = model.config["providersConfig"] as? [[String: Any]] ?? []
         let item = list.first { ($0["provider"] as? String) == selectedID }
@@ -638,6 +704,39 @@ private struct NativeSettingsSheet: View {
         baseURL = item?["baseURL"] as? String ?? selected.baseURL
         let modelConfig = item?["model"] as? [String: Any] ?? [:]
         modelName = (modelConfig["customModel"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? (modelConfig["model"] as? String ?? selected.defaultModel)
+        modelFetchError = nil
+        let cacheKey = ModelDirectory.cacheKey(baseURL: selected.id == "openai-compatible" ? baseURL : selected.baseURL, apiKey: apiKey)
+        if let cached = UserDefaults.standard.stringArray(forKey: cacheKey), !cached.isEmpty { availableModels = cached }
+        else { availableModels = [] }
+    }
+    private func fetchModels() async {
+        modelFetchError = nil
+        let endpointBase = selected.id == "openai-compatible" ? baseURL : selected.baseURL
+        guard let url = ModelDirectory.requestURL(baseURL: endpointBase) else { modelFetchError = "API Base URL 无效。"; return }
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey.trimmingCharacters(in: .whitespacesAndNewlines))", forHTTPHeaderField: "Authorization")
+        isFetchingModels = true
+        defer { isFetchingModels = false }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let response = response as? HTTPURLResponse else { modelFetchError = "服务器响应无效。"; return }
+            guard (200..<300).contains(response.statusCode) else {
+                switch response.statusCode {
+                case 401: modelFetchError = "API Key 无效或已过期"
+                case 404: modelFetchError = "该端点不支持 /models，请手动输入模型名"
+                default: modelFetchError = "获取模型列表失败（HTTP \(response.statusCode)）"
+                }
+                return
+            }
+            let models = try ModelDirectory.parse(data)
+            availableModels = models
+            UserDefaults.standard.set(models, forKey: modelCacheKey)
+            modelSearch = ""
+            showingModels = true
+        } catch {
+            modelFetchError = (error as? URLError)?.code == .timedOut ? "请求超时，请检查网络或端点" : "获取模型列表失败：\(error.localizedDescription)"
+        }
     }
     private func save() { guard model.save(provider: selected, apiKey: apiKey, model: modelName, baseURL: baseURL, language: target, theme: theme) else { saveError = "无法写入 App Group 设置。"; return }; dismiss() }
 }

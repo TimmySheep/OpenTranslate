@@ -1,0 +1,15 @@
+{
+  "fill": { "solid": "srgb:0.07451,0.07451,0.07843,1.00000" },
+  "groups": [
+    {
+      "name": "Glyph",
+      "layers": [
+        { "name": "foreground", "image-name": "Foreground.png", "glass": true }
+      ],
+      "shadow": { "kind": "neutral", "opacity": 0.35 },
+      "specular": true,
+      "translucency": { "enabled": true, "value": 0.15 }
+    }
+  ],
+  "supported-platforms": { "squares": ["iOS", "macOS"] }
+}

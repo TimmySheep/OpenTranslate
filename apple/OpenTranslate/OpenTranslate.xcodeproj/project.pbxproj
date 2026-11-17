@@ -31,6 +31,8 @@
 		AA1000010000000000000003 /* TranslateScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000002 /* TranslateScreen.swift */; };
 		11EEF83A2FE586BB003E1F8A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */; };
 		11EEF83B2FE586BB003E1F8A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */; };
+		AA1000010000000000000004 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000005 /* AppIcon.icon */; };
+		AA1000010000000000000006 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000005 /* AppIcon.icon */; };
 		11EEF83C2FE586BB003E1F8A /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF7FD2FE586BB003E1F8A /* SafariWebExtensionHandler.swift */; };
 		11EEF83D2FE586BB003E1F8A /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EEF7FD2FE586BB003E1F8A /* SafariWebExtensionHandler.swift */; };
 		11EEF8592FE586BC003E1F8A /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 11EEF84F2FE586BC003E1F8A /* background.js */; };
@@ -113,6 +115,7 @@
 		11EEF7FA2FE586BB003E1F8A /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		AA1000010000000000000002 /* TranslateScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslateScreen.swift; sourceTree = "<group>"; };
 		11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA1000010000000000000005 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		11EEF7FD2FE586BB003E1F8A /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
 		11EEF8022FE586BB003E1F8A /* OpenTranslate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenTranslate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		11EEF8052FE586BB003E1F8A /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -199,6 +202,7 @@
 				11EEF7FA2FE586BB003E1F8A /* ViewController.swift */,
 				AA1000010000000000000002 /* TranslateScreen.swift */,
 				11EEF7FB2FE586BB003E1F8A /* Assets.xcassets */,
+				AA1000010000000000000005 /* AppIcon.icon */,
 				11EEF7F42FE586BB003E1F8A /* Resources */,
 			);
 			path = "Shared (App)";
@@ -444,6 +448,7 @@
 				11EEF8302FE586BB003E1F8A /* Main.html in Resources */,
 				11EEF8362FE586BB003E1F8A /* Script.js in Resources */,
 				11EEF83A2FE586BB003E1F8A /* Assets.xcassets in Resources */,
+				AA1000010000000000000004 /* AppIcon.icon in Resources */,
 				11EEF80E2FE586BB003E1F8A /* Main.storyboard in Resources */,
 				11EEF8342FE586BB003E1F8A /* Style.css in Resources */,
 				11EEF90C2FE586BB003E1F8A /* settings in Resources */,
@@ -459,6 +464,7 @@
 				11EEF81A2FE586BB003E1F8A /* Main.storyboard in Resources */,
 				11EEF8372FE586BB003E1F8A /* Script.js in Resources */,
 				11EEF83B2FE586BB003E1F8A /* Assets.xcassets in Resources */,
+				AA1000010000000000000006 /* AppIcon.icon in Resources */,
 				11EEF8312FE586BB003E1F8A /* Main.html in Resources */,
 				11EEF90D2FE586BB003E1F8A /* settings in Resources */,
 			);
