@@ -6,5 +6,7 @@
 - 上传弹窗：`confirmationDialog` 改为锚在「上传」按钮上的 `Menu`（`menuIndicator(.hidden)`，Menu 自身约束为 44×44，外层居中），弹出位置跟随按钮；菜单项仍是「从照片选择 / 选择文档」。
 - 验证：`xcodebuild -scheme "OpenTranslate (iOS)"`（generic iOS Simulator，`CODE_SIGNING_ALLOWED=NO`）与 `OpenTranslate (macOS)` 均 `BUILD SUCCEEDED`；在 ASC-iPhone16Pro（iOS 27.2）安装启动并截图，主界面布局与上传/语音/相机按钮位置未变。
 - 限制：模拟器没有点按注入工具，Enter 提交、置顶按钮、菜单锚定三项交互只做了编译与代码层确认，未在设备上实际点击验证。
-- TestFlight：build 17（1.0.1）已归档、导出并上传，altool 回执 `No errors`，`PROCESSINGSTATE: VALID`；代码改动见提交 `e51b931`，build 号提升与本次日志另行提交。
+- TestFlight：build 17（1.0.1）已归档、导出并上传，altool 回执 `No errors`，`PROCESSINGSTATE: VALID`；代码改动见提交 `e51b931`。
+- 上架后未出现在 TestFlight 的原因：构建缺少出口合规信息（`usesNonExemptEncryption` 为空，状态 `MISSING_EXPORT_COMPLIANCE`），且「内部测试」组的 `hasAccessToAllBuilds = false`，新构建不会自动进组。已通过 App Store Connect API 把该构建标记为 `usesNonExemptEncryption = false` 并加入「内部测试」组，`internalBuildState` 变为 `IN_BETA_TESTING`。
+- 另有一个同一版本号 17 的构建（`8da27d4a`，09:06 PST 上传，早于本次归档）不在任何测试组、合规信息仍为空，来源未确认。
 - 未 push（`feat/translate-app` 无上游分支）、未新增依赖。
