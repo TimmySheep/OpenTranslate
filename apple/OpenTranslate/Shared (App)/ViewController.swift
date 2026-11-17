@@ -6,6 +6,7 @@
 //
 
 import WebKit
+import SwiftUI
 
 #if os(iOS)
 import UIKit
@@ -31,6 +32,15 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        // Native SwiftUI is the default. Set UserDefaults key
+        // `opentranslate.nativeScreen.enabled` to false to restore the original WKWebView.
+        // For a build-time override, replace this expression with `false` here.
+        let useNativeScreen = UserDefaults.standard.object(forKey: nativeScreenDefaultsKey) as? Bool ?? true
+        if useNativeScreen {
+            installNativeScreen()
+            return
+        }
+
         replaceWebViewForFileAccess()
         self.webView.navigationDelegate = self
 
@@ -45,6 +55,33 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
         loadAppPage()
 
         startObservingSharedSettingsChanges()
+    }
+
+    private func installNativeScreen() {
+        #if os(iOS)
+        let host = UIHostingController(rootView: TranslateScreen())
+        addChild(host)
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: view.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        host.didMove(toParent: self)
+        #elseif os(macOS)
+        let host = NSHostingController(rootView: TranslateScreen())
+        addChild(host)
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: view.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        #endif
     }
 
     /// Storyboard WKWebView copies its configuration at init, so toggling

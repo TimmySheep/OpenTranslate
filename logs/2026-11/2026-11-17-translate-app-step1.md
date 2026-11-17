@@ -6,7 +6,15 @@
 - CORS probe used only the fake key `sk-invalid-test`: DeepSeek returned HTTP 401 in both WKWebView configurations. OpenAI returned `TypeError: Load failed` in default configuration and HTTP 401 with universal file access enabled; default cause remains undetermined. Existing App source already enables universal file access.
 - Validation: pre-change and post-change `pnpm build:safari` succeeded. Standalone App build succeeded. WKWebView `loadFileURL()` rendered the app controls with the existing universal-access setting. Full suite: 1020 passed, 4 existing external-network failures (Google timeouts, Microsoft 404). Translation itself was not verified; no real API key was read or used. Type check still reports two errors in untouched files (`vitest.setup.ts` and `wxt.options-app.config.ts`).
 - Detailed reports: `.dispatch/REPORT-cors-probe.md` and `.dispatch/REPORT-translate-app.md`.
+
 - No Xcode project changes, commit, or push.
+
+## 2026-11-17 — 原生 SwiftUI 主界面第一步
+
+- 在 `apple/OpenTranslate/Shared (App)/TranslateScreen.swift` 新增 SwiftUI 主界面及 Preview，并更新 Xcode 工程引用；`ViewController.swift` 默认用 hosting controller 承载原生界面，同时保留 Storyboard/WKWebView 回退（UserDefaults 键 `opentranslate.nativeScreen.enabled=false`）。
+- Liquid Glass 使用 `.otGlass(cornerRadius:)` 分级：iOS/macOS 26+ `.glassEffect`，旧系统 `.ultraThinMaterial`，未用 `.blur()`；包含三个动态暖色光斑以及宽屏双栏布局。
+- 验证：任务要求的 iOS 与 macOS 不签名 `xcodebuild` 均 BUILD SUCCEEDED，退出码 0；部署目标未改。未运行模拟器/视觉验收；无翻译逻辑。未调用 CUA、签名、archive、上传、改 build 号、加依赖、改 `extension/`、commit 或 push。
+- 详细报告：`.dispatch/REPORT-native-step1.md`。
 
 ## 2026-11-17 — Translate App first complete feature pass
 
@@ -33,3 +41,24 @@
 - Updated `scripts/sync-resources.sh` to separately sync options-app and translate-app into the settings folder and its `translate-app/` child, keeping both `rsync --delete` targets isolated. Updated `ViewController.swift` to prefer translate-app, retain options-app fallback, and grant file access to the `settings` root.
 - Validation: Safari build, options-app standalone build, and translate-app standalone build all succeeded. Sync listing confirmed both apps and their resources. Unsigned iOS `xcodebuild` succeeded (exit 0); built `OpenTranslate.app/settings/translate-app/` contains the HTML, JS chunk, CSS, locale files, icons, manifest, and assets. `pnpm test`: 1020 passed; 4 known external-network failures (Google timeouts, Microsoft 404).
 - No build number change, archive/export/upload, dependency addition, UI/business logic change, CUA, commit, push, or cleanup. Full evidence: `.dispatch/REPORT-app-integration.md`.
+
+## 2026-11-17 — 原生 SwiftUI 主界面缺陷修复
+
+- 修复顶部栏品牌图标为 `BrandIcon` imageset；圆形玻璃按钮改用 `.otGlassCircle()`，避免对圆角矩形玻璃做事后圆形裁剪。
+- 顺手让 iPhone 竖屏输入卡扩展填充可用高度，并要求 iOS 双栏同时满足宽度阈值及 regular horizontal size class；保留 3 个柔和漂移光斑、Storyboards 和原 WKWebView 回退。
+- 验证：不签名 iOS 与 macOS `xcodebuild` 均 BUILD SUCCEEDED，退出码 0；部署目标保持 iOS 15.0 / macOS 12.0。未使用 `.blur()`，未运行模拟器/视觉验收。
+- 未调用 CUA、签名、archive、上传、改 build 号、加依赖、触碰 `extension/`、删除 WebView 路径、commit 或 push。报告：`.dispatch/REPORT-native-step1-fix.md`。
+
+## 2026-11-17 — 原生翻译功能第二步
+
+- 在 `apple/OpenTranslate/Shared (App)/TranslateScreen.swift` 完成原生编辑态、URLSession Chat Completions 翻译、结构化 JSON 容错、结果交互和 BYOK 设置 sheet；仅此文件是本轮新增/修改的 Swift 文件。App Group 配置按 `SharedSettingsStore` 的 config JSON 结构读写，key 不打印或写日志。保留完整设置 WKWebView 入口和原生界面回退开关。
+- 原生兼容 provider：DeepSeek、OpenAI、SiliconFlow、OpenAI-compatible、Groq、DeepInfra、Mistral、Together.ai、Cerebras、Moonshot AI、Alibaba Cloud、Volcengine、xAI、OpenRouter。DeepLX、Microsoft/Google 翻译等非 Chat Completions provider 暂不支持，详见任务报告。
+- 不签名 iOS Simulator 与 macOS `xcodebuild` 均退出码 0；`git diff --check` 通过；文件行数见报告。App Group 当前无可见 config，环境无匹配 API key，因此未做真机翻译验证。
+- 未改 build 号或部署目标；未调用 CUA、commit、push、archive 或上传。报告：`.dispatch/REPORT-native-step2.md`。
+
+
+## 2026-11-17 — 深色玻璃版图标替换
+
+- 按 `.dispatch/TASK-icon-B.md` 从 `icon-source-B.jpg` 主图裁切生成 iOS、macOS、Safari 扩展和 BrandIcon 资源；macOS/扩展遵循项目现有脚本尺寸与留白/圆角规则。未触碰本工作区其他已有改动。
+- 验证：23 个 PNG 文件的尺寸、模式和字节数记录于 `.dispatch/REPORT-icon-B.md`；iOS 1024 四角为 RGB 黑色、无 alpha；macOS 1024 四角 alpha 均为 0；预览 `.dispatch/icon-B-preview.png` 已生成。BrandIcon 暖米色背景建议后续提供浅底版本，未改配色。
+- 未改 build 号、未 commit/push、未调用 CUA。
