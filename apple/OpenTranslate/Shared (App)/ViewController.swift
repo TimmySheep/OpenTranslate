@@ -99,8 +99,15 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
     }
 
     private func loadAppPage() {
-        // Prefer the bundled options-app settings UI. Falls back to Main.html
-        // if the settings folder is missing from the app bundle.
+        // Prefer the bundled translate-app UI, with options-app retained as a
+        // fallback for older or incomplete app bundles.
+        if let settingsURL = Bundle.main.url(forResource: "translate-app", withExtension: "html", subdirectory: "settings/translate-app") {
+            isShowingSettingsPage = true
+            let accessRoot = settingsURL.deletingLastPathComponent().deletingLastPathComponent()
+            self.webView.loadFileURL(settingsURL, allowingReadAccessTo: accessRoot)
+            return
+        }
+
         if let settingsURL = Bundle.main.url(forResource: "options-app", withExtension: "html", subdirectory: "settings") {
             isShowingSettingsPage = true
             let accessRoot = settingsURL.deletingLastPathComponent()

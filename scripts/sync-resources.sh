@@ -12,7 +12,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_EXT="$REPO_ROOT/extension/.output/safari-mv3"
 SRC_APP="$REPO_ROOT/extension/.output/options-app"
+SRC_TRANSLATE_APP="$REPO_ROOT/extension/.output/translate-app-final"
 DEST_APP="$REPO_ROOT/apple/OpenTranslate/Shared (App)/Resources/settings"
+DEST_TRANSLATE_APP="$DEST_APP/translate-app"
 
 missing=0
 if [ ! -d "$SRC_EXT" ]; then
@@ -23,6 +25,11 @@ fi
 if [ ! -d "$SRC_APP" ]; then
   echo "Missing $SRC_APP"
   echo "Build first: scripts/build-safari.sh  (also builds options-app)"
+  missing=1
+fi
+if [ ! -d "$SRC_TRANSLATE_APP" ]; then
+  echo "Missing $SRC_TRANSLATE_APP"
+  echo "Build first: pnpm build:translate-app"
   missing=1
 fi
 [ "$missing" -eq 0 ] || exit 1
@@ -47,12 +54,9 @@ mkdir -p "$DEST_APP"
 echo "→ syncing $SRC_APP → $DEST_APP"
 rsync -a --delete "$SRC_APP"/ "$DEST_APP"/
 
+mkdir -p "$DEST_TRANSLATE_APP"
+echo "→ syncing $SRC_TRANSLATE_APP → $DEST_TRANSLATE_APP"
+rsync -a --delete "$SRC_TRANSLATE_APP"/ "$DEST_TRANSLATE_APP"/
+
 echo "✓ Synced. Rebuild in Xcode (or via xcodebuild) to pick up the new bundle."
 echo
-echo "NOTE: pbxproj is not owned by this task. To actually pack settings/ into"
-echo "the iOS and macOS app bundles, the coordinator must add a folder reference."
-echo "Suggested IDs (unused as of 11EEF90A):"
-echo "  11EEF90B2FE586BB003E1F8A  PBXFileReference  settings  lastKnownFileType=folder  path=settings"
-echo "  11EEF90C2FE586BB003E1F8A  PBXBuildFile      settings in Resources (iOS App,  11EEF800…)"
-echo "  11EEF90D2FE586BB003E1F8A  PBXBuildFile      settings in Resources (macOS App, 11EEF812…)"
-echo "And add 11EEF90B… to group 11EEF7F4… /* Resources */ under Shared (App)."
