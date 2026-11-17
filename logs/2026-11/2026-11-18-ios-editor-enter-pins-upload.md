@@ -6,4 +6,5 @@
 - 上传弹窗：`confirmationDialog` 改为锚在「上传」按钮上的 `Menu`（`menuIndicator(.hidden)`，Menu 自身约束为 44×44，外层居中），弹出位置跟随按钮；菜单项仍是「从照片选择 / 选择文档」。
 - 验证：`xcodebuild -scheme "OpenTranslate (iOS)"`（generic iOS Simulator，`CODE_SIGNING_ALLOWED=NO`）与 `OpenTranslate (macOS)` 均 `BUILD SUCCEEDED`；在 ASC-iPhone16Pro（iOS 27.2）安装启动并截图，主界面布局与上传/语音/相机按钮位置未变。
 - 限制：模拟器没有点按注入工具，Enter 提交、置顶按钮、菜单锚定三项交互只做了编译与代码层确认，未在设备上实际点击验证。
-- 未 commit、未 push（`feat/translate-app` 无上游分支）、未改 build 号、未新增依赖。
+- TestFlight：build 17（1.0.1）已归档、导出并上传，altool 回执 `No errors`，`PROCESSINGSTATE: VALID`；代码改动见提交 `e51b931`，build 号提升与本次日志另行提交。
+- 未 push（`feat/translate-app` 无上游分支）、未新增依赖。
