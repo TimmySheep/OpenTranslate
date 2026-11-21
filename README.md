@@ -1,3 +1,22 @@
+<!--readme-header-->
+<p align="center">
+  <img src="apple/OpenTranslate/Shared%20(App)/Assets.xcassets/AppIcon.appiconset/universal-icon-1024@1x.png" width="128" alt="OpenTranslate icon">
+</p>
+
+<h1 align="center">OpenTranslate</h1>
+
+<p align="center">
+  <b>Safari 全页翻译扩展：约 32 个翻译提供方，设置只存本机</b><br>
+  <sub>Full-page translation for Safari on macOS, iPhone and iPad</sub>
+</p>
+
+<p align="center"><img alt="platform" src="https://img.shields.io/badge/platform-Safari%20%C2%B7%20macOS%20%C2%B7%20iOS-006CFF?logo=safari&logoColor=white"><img alt="license" src="https://img.shields.io/github/license/TimmySheep/OpenTranslate?label=license&color=blue"></p>
+
+<p align="center"><sub>Fork of <a href="https://github.com/mekedron/OpenTranslate">mekedron/OpenTranslate</a></sub></p>
+
+---
+<!--/readme-header-->
+
 > **Fork note · 关于本 fork**
 > This repository is a fork of [mekedron/OpenTranslate](https://github.com/mekedron/OpenTranslate).
 > Upstream authorship, licensing (GPL-3.0-or-later) and the credits below are unchanged.
