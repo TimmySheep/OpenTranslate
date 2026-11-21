@@ -1,3 +1,12 @@
+> **Fork note · 关于本 fork**
+> This repository is a fork of [mekedron/OpenTranslate](https://github.com/mekedron/OpenTranslate).
+> Upstream authorship, licensing (GPL-3.0-or-later) and the credits below are unchanged.
+> Adaptation work for Safari on macOS / iOS lives on the `feat/*` branches; `main` tracks upstream.
+> 本仓库是 mekedron/OpenTranslate 的 fork，作者、许可证与下方致谢均以上游为准。本地适配改动在 `feat/*` 分支上，`main` 跟随上游。
+> Product page / 产品页: https://apps.timhuang.net/opentranslate/
+
+---
+
 # OpenTranslate
 
 A Safari Web Extension for **full-page translation** on **macOS, iPhone, and iPad**. It exists
